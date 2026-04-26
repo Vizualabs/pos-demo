@@ -1,26 +1,100 @@
-import { DEMO_KEYS, loadJson, nowIso, saveJson } from "@/lib/demoPersistence"
+import api from "@/axios"
 import { PAID_LEAVE_DAYS_PER_MONTH } from "@/lib/employeesApi"
 
-export type AttendanceStatus = "present" | "leave" | "absent"
+export type AttendanceStatus = "PRESENT" | "LEAVE" | "ABSENT"
 
 export type AttendanceRecord = {
-  id: string
-  employeeId: string
-  date: string
+  attendanceId: number
+  empId: number
+  attendanceDate: string
   status: AttendanceStatus
   createdAt: string
+  updatedAt?: string
 }
 
-function readAll(): AttendanceRecord[] {
-  return loadJson<AttendanceRecord[]>(DEMO_KEYS.attendance, [])
+export type AttendanceFilterParams = {
+  empId?: number
+  startDate?: string
+  endDate?: string
+  page?: number
+  size?: number
 }
 
-function writeAll(list: AttendanceRecord[]) {
-  saveJson(DEMO_KEYS.attendance, list)
+function toStatus(raw: unknown): AttendanceStatus {
+  const value = String(raw ?? "").toUpperCase()
+  if (value === "LEAVE") return "LEAVE"
+  if (value === "ABSENT") return "ABSENT"
+  return "PRESENT"
+}
+
+function normalizeRecord(raw: any): AttendanceRecord {
+  return {
+    attendanceId: Number(raw?.attendanceId ?? raw?.id ?? 0),
+    empId: Number(raw?.empId ?? raw?.employeeId ?? 0),
+    attendanceDate: String(raw?.attendanceDate ?? raw?.date ?? ""),
+    status: toStatus(raw?.status),
+    createdAt: String(raw?.createdAt ?? ""),
+    updatedAt: raw?.updatedAt != null ? String(raw.updatedAt) : undefined,
+  }
 }
 
 export async function getAllAttendanceRecords(): Promise<AttendanceRecord[]> {
-  return readAll()
+  const resp = await api.get("/attendance/filter")
+  const payload = Array.isArray(resp?.data) ? resp.data : []
+  return payload.map(normalizeRecord)
+}
+
+export async function getAttendanceById(id: number): Promise<AttendanceRecord> {
+  const resp = await api.get(`/attendance/${id}`)
+  return normalizeRecord(resp?.data)
+}
+
+export async function createAttendanceRecord(input: {
+  empId: number
+  attendanceDate: string
+  status: AttendanceStatus
+}): Promise<AttendanceRecord> {
+  const payload = {
+    empId: Number(input.empId),
+    attendanceDate: String(input.attendanceDate).trim(),
+    status: toStatus(input.status),
+  }
+  console.log("Creating attendance record with payload:", payload)
+  const resp = await api.post("/attendance", payload)
+  return normalizeRecord(resp?.data)
+}
+
+export async function updateAttendanceRecord(
+  id: number,
+  input: {
+    empId: number
+    attendanceDate: string
+    status: AttendanceStatus
+  },
+): Promise<AttendanceRecord> {
+  const payload = {
+    empId: Number(input.empId),
+    attendanceDate: String(input.attendanceDate).trim(),
+    status: toStatus(input.status),
+  }
+  const resp = await api.put(`/attendance/${id}`, payload)
+  return normalizeRecord(resp?.data)
+}
+
+export async function deleteAttendanceRecord(id: number): Promise<void> {
+  await api.delete(`/attendance/${id}`)
+}
+
+export async function filterAttendanceRecords(params: AttendanceFilterParams): Promise<AttendanceRecord[]> {
+  const qp: Record<string, string | number> = {}
+  if (params.empId != null && Number.isFinite(params.empId)) qp.empId = params.empId
+  if (params.startDate) qp.startDate = params.startDate.trim()
+  if (params.endDate) qp.endDate = params.endDate.trim()
+  if (params.page != null) qp.page = params.page
+  if (params.size != null) qp.size = params.size
+  const resp = await api.get("/attendance/filter", { params: qp })
+  const payload = Array.isArray(resp?.data) ? resp.data : []
+  return payload.map(normalizeRecord)
 }
 
 /** yyyy-mm for month key */
@@ -29,37 +103,48 @@ export function yearMonthFromDate(isoDate: string): string {
 }
 
 export async function upsertAttendanceForDay(
-  employeeId: string,
-  date: string,
+  empId: number,
+  attendanceDate: string,
   status: AttendanceStatus,
 ): Promise<AttendanceRecord> {
-  const list = readAll()
-  const existingIdx = list.findIndex((r) => r.employeeId === employeeId && r.date === date)
-  const t = nowIso()
-  if (existingIdx >= 0) {
-    list[existingIdx] = { ...list[existingIdx], status, createdAt: t }
-    writeAll(list)
-    return list[existingIdx]
+  const cleanDate = String(attendanceDate).trim()
+
+  // Some backends reject startDate/endDate filter combinations with 400.
+  // Query by employee first, then match day client-side.
+  try {
+    const existingForEmployee = await filterAttendanceRecords({ empId })
+    const sameDay = existingForEmployee.find((r) => String(r.attendanceDate).trim() === cleanDate)
+    if (sameDay) {
+      return updateAttendanceRecord(sameDay.attendanceId, { empId, attendanceDate: cleanDate, status })
+    }
+  } catch {
+    // Continue with create fallback below.
   }
-  const row: AttendanceRecord = {
-    id: `ATT-${Date.now()}`,
-    employeeId,
-    date,
-    status,
-    createdAt: t,
+
+  try {
+    return createAttendanceRecord({ empId, attendanceDate: cleanDate, status })
+  } catch (error: any) {
+    const code = Number(error?.response?.status)
+    // If create fails due duplicate/conflict semantics, retry update path.
+    if (code === 409 || code === 400) {
+      const existingForEmployee = await filterAttendanceRecords({ empId })
+      const sameDay = existingForEmployee.find((r) => String(r.attendanceDate).trim() === cleanDate)
+      if (sameDay) {
+        return updateAttendanceRecord(sameDay.attendanceId, { empId, attendanceDate: cleanDate, status })
+      }
+    }
+    throw error
   }
-  writeAll([row, ...list])
-  return row
 }
 
-export function summarizeMonth(records: AttendanceRecord[], employeeId: string, ym: string) {
-  const rows = records.filter((r) => r.employeeId === employeeId && r.date.startsWith(ym))
+export function summarizeMonth(records: AttendanceRecord[], empId: number, ym: string) {
+  const rows = records.filter((r) => r.empId === empId && r.attendanceDate.startsWith(ym))
   let present = 0
   let leave = 0
   let absent = 0
   for (const r of rows) {
-    if (r.status === "present") present++
-    else if (r.status === "leave") leave++
+    if (r.status === "PRESENT") present++
+    else if (r.status === "LEAVE") leave++
     else absent++
   }
   const paidLeaveDays = Math.min(leave, PAID_LEAVE_DAYS_PER_MONTH)

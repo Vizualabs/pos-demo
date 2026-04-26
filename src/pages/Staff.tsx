@@ -36,14 +36,16 @@ const Staff = () => {
   const [addOpen, setAddOpen] = useState(false);
 
   const [newStaff, setNewStaff] = useState({
-    name: "",
+    username: "",
+    fullName: "",
     role: "",
     paymentPerDay: "",
   });
 
   const [detailStaff, setDetailStaff] = useState<Employee | null>(null);
   const [detailForm, setDetailForm] = useState({
-    name: "",
+    username: "",
+    fullName: "",
     role: "",
     paymentPerDay: "",
   });
@@ -100,11 +102,19 @@ const Staff = () => {
   const handleDeleteLoan = async (loanId: number) => {
     if (!window.confirm('Delete this loan?')) return
     try {
+      // optimistic UI update
+      setLoans((prev) => prev.filter((x) => x.loanId !== loanId))
       await deleteLoan(loanId)
       toast.success('Loan deleted')
+      // ensure fresh data from server
       if (loanOpenFor?.empId) {
-        const list = await getLoansByEmployee(loanOpenFor.empId)
-        setLoans(list)
+        try {
+          const list = await getLoansByEmployee(loanOpenFor.empId)
+          setLoans(list)
+        } catch (err) {
+          // keep optimistic removal if refresh failed
+          console.error('Could not refresh loans after delete', err)
+        }
       }
     } catch (err) {
       console.error(err)
@@ -240,7 +250,8 @@ const Staff = () => {
   const openEmployeeDetail = (e: Employee) => {
     setDetailStaff(e);
     setDetailForm({
-      name: e.name,
+      username: e.username,
+      fullName: e.fullName,
       role: e.role,
       paymentPerDay: String(e.paymentPerDay),
     });
@@ -302,12 +313,21 @@ const Staff = () => {
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="staff-name">Full name</Label>
+                  <Label htmlFor="staff-username">Username</Label>
                   <Input
-                    id="staff-name"
-                    value={newStaff.name}
-                    onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
-                    placeholder="Employee name"
+                    id="staff-username"
+                    value={newStaff.username}
+                    onChange={(e) => setNewStaff({ ...newStaff, username: e.target.value })}
+                    placeholder="e.g. john.doe"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="staff-fullname">Full name</Label>
+                  <Input
+                    id="staff-fullname"
+                    value={newStaff.fullName}
+                    onChange={(e) => setNewStaff({ ...newStaff, fullName: e.target.value })}
+                    placeholder="e.g. John Doe"
                   />
                 </div>
                 <div className="grid gap-2">
@@ -317,6 +337,7 @@ const Staff = () => {
                     value={newStaff.role}
                     onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value })}
                     placeholder="e.g. Head Chef, Cashier"
+                    disabled
                   />
                 </div>
                 <div className="grid gap-2">
@@ -404,7 +425,7 @@ const Staff = () => {
                   >
                     <div className="flex items-center gap-4 flex-1 min-w-[200px]">
                       <div className="w-12 h-12 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-bold text-sm">
-                        {staff.name
+                        {staff.fullName
                           .split(" ")
                           .filter(Boolean)
                           .map((n) => n[0])
@@ -418,8 +439,9 @@ const Staff = () => {
                           className="font-semibold text-left hover:underline decoration-primary underline-offset-2 text-primary"
                           onClick={() => openEmployeeDetail(staff)}
                         >
-                          {staff.name}
+                          {staff.fullName}
                         </button>
+                        <p className="text-sm text-muted-foreground">@{staff.username}</p>
                         <p className="text-sm text-muted-foreground">{staff.role}</p>
                         {staff.empCode ? (
                           <p className="text-xs text-muted-foreground font-mono">{staff.empCode}</p>
@@ -472,11 +494,21 @@ const Staff = () => {
             {detailStaff && (
               <div className="grid gap-4 py-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="det-name">Full name</Label>
+                  <Label htmlFor="det-username">Username</Label>
                   <Input
-                    id="det-name"
-                    value={detailForm.name}
-                    onChange={(e) => setDetailForm((f) => ({ ...f, name: e.target.value }))}
+                    id="det-username"
+                    value={detailForm.username}
+                    onChange={(e) => setDetailForm((f) => ({ ...f, username: e.target.value }))}
+                    placeholder="e.g. john.doe"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="det-fullname">Full name</Label>
+                  <Input
+                    id="det-fullname"
+                    value={detailForm.fullName}
+                    onChange={(e) => setDetailForm((f) => ({ ...f, fullName: e.target.value }))}
+                    placeholder="e.g. John Doe"
                   />
                 </div>
                 <div className="grid gap-2">
@@ -485,6 +517,7 @@ const Staff = () => {
                     id="det-role"
                     value={detailForm.role}
                     onChange={(e) => setDetailForm((f) => ({ ...f, role: e.target.value }))}
+                    disabled
                   />
                 </div>
                 <div className="grid gap-2">
