@@ -7,7 +7,8 @@ export type Employee = {
   /** Server numeric id (empId / id) if available */
   empId?: number
   employeeId: string
-  name: string
+  username: string
+  fullName: string
   role: string
   paymentPerDay: number
   /** Manually set monthly recovery (loans / salary advance); subtracted from gross in payroll. */
@@ -22,7 +23,8 @@ export { PAID_LEAVE_DAYS_PER_MONTH }
 const DEFAULT_EMPLOYEES: Employee[] = [
   {
     employeeId: "EMP-DEMO-1",
-    name: "Nishantha Perera",
+    username: "nperera",
+    fullName: "Nishantha Perera",
     role: "Head Chef",
     paymentPerDay: 4500,
     monthlyLoanAdvanceDeductionLkr: 0,
@@ -30,7 +32,8 @@ const DEFAULT_EMPLOYEES: Employee[] = [
   },
   {
     employeeId: "EMP-DEMO-2",
-    name: "Sanduni Wickramasinghe",
+    username: "swickrama",
+    fullName: "Sanduni Wickramasinghe",
     role: "Cashier",
     paymentPerDay: 3200,
     monthlyLoanAdvanceDeductionLkr: 0,
@@ -44,7 +47,8 @@ function normalizeEmployee(e: Partial<Employee> & { employeeId: string }): Emplo
     empCode: e.empCode !== undefined && e.empCode !== null ? String(e.empCode) : undefined,
     empId: typeof e.empId === 'number' && Number.isFinite(e.empId) ? e.empId : undefined,
     employeeId: String(e.employeeId),
-    name: String(e.name ?? "").trim() || "Unnamed",
+    username: String(e.username ?? "").trim() || "unnamed_user",
+    fullName: String(e.fullName ?? "").trim() || "Unnamed",
     role: String(e.role ?? "").trim() || "—",
     paymentPerDay: Math.max(0, Number(e.paymentPerDay ?? 0)),
     monthlyLoanAdvanceDeductionLkr:
@@ -66,16 +70,34 @@ function readAll(): Employee[] {
     return [...DEFAULT_EMPLOYEES]
   }
   let changed = false
-  const migrated = raw.map((e) => {
+  const migrated = raw.map((e: any) => {
     const leg = LEGACY_SINHALA_TO_ENGLISH[e.employeeId]
-    if (leg && e.name === leg.from) {
+    // Handle legacy migration from Sinhala to English
+    if (leg && e.fullName === leg.from) {
       changed = true
-      return { ...e, name: leg.to }
+      return { ...e, fullName: leg.to }
+    }
+    // Migrate old 'name' field to 'fullName'
+    if (e.name && !e.fullName) {
+      changed = true
+      return { ...e, fullName: e.name }
+    }
+    // Generate username from fullName if missing
+    if (!e.username && e.fullName) {
+      changed = true
+      const username = e.fullName
+        .toLowerCase()
+        .split(" ")
+        .filter(Boolean)
+        .join(".")
+      return { ...e, username }
     }
     return e
   })
   const normalized = migrated.map((e) => normalizeEmployee(e as Partial<Employee> & { employeeId: string }))
-  const needSchemaUpgrade = raw.some((e) => (e as { monthlyLoanAdvanceDeductionLkr?: number }).monthlyLoanAdvanceDeductionLkr == null)
+  const needSchemaUpgrade =
+    raw.some((e: any) => (e as { monthlyLoanAdvanceDeductionLkr?: number }).monthlyLoanAdvanceDeductionLkr == null) ||
+    raw.some((e: any) => !e.username || !e.fullName)
   if (changed || needSchemaUpgrade) saveJson(DEMO_KEYS.employees, normalized)
   return normalized
 }
@@ -143,7 +165,8 @@ export async function createEmployee(
   const list = readAll()
   const row = normalizeEmployee({
     employeeId: `EMP-${Date.now()}`,
-    name: input.name.trim(),
+    username: input.username.trim(),
+    fullName: input.fullName.trim(),
     role: input.role.trim(),
     paymentPerDay: Math.max(0, input.paymentPerDay),
     monthlyLoanAdvanceDeductionLkr:
@@ -202,7 +225,7 @@ export async function createEmployeeRemote(
 
 export async function patchEmployee(
   employeeId: string,
-  patch: Partial<Pick<Employee, "name" | "role" | "paymentPerDay" | "monthlyLoanAdvanceDeductionLkr">>,
+  patch: Partial<Pick<Employee, "username" | "fullName" | "role" | "paymentPerDay" | "monthlyLoanAdvanceDeductionLkr">>,
 ): Promise<Employee> {
   const list = readAll().map((e) => normalizeEmployee(e))
   const idx = list.findIndex((e) => e.employeeId === employeeId)
@@ -210,7 +233,8 @@ export async function patchEmployee(
   const cur = list[idx]
   const next = normalizeEmployee({
     ...cur,
-    name: patch.name !== undefined ? patch.name : cur.name,
+    username: patch.username !== undefined ? patch.username : cur.username,
+    fullName: patch.fullName !== undefined ? patch.fullName : cur.fullName,
     role: patch.role !== undefined ? patch.role : cur.role,
     paymentPerDay: patch.paymentPerDay !== undefined ? patch.paymentPerDay : cur.paymentPerDay,
     monthlyLoanAdvanceDeductionLkr:
