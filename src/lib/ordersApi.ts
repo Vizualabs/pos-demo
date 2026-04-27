@@ -1,15 +1,26 @@
-import { DEMO_KEYS, loadJson, nowIso, saveJson } from "@/lib/demoPersistence"
+import { apiFetch } from "@/lib/apiClient"
+import { nowIso } from "@/lib/demoPersistence"
 
-export type PaymentMethod = "CASH" | "CARD" | "BANK_TRANSFER" | "CASH_ON_DELIVERY"
+export type PaymentMethod = "CASH" | "CARD" | "PAYPAL" | "BANK_TRANSFER" | "CASH_ON_DELIVERY"
 
 export type OrderStatus = "NEW" | "PAID" | "CANCELLED" | "UPDATED"
 
 export type OrderType = "DINE_IN" | "TAKE_AWAY" | "DELIVERY"
 export type Kitchen = "KITCHEN_1" | "KITCHEN_2"
 
+export type PortionType = "MEDIUM" | "LARGE"
+
 export type OrderItemRequestDto = {
   productId: number
   quantity: number
+  /** Preferred key used by this frontend and order-items API. */
+  portionType?: PortionType | null
+  /** Alternate key some backends use. We send both. */
+  portionSize?: PortionType | null
+  /** Optional: if provided, backend can skip unit-price lookup. */
+  unitPrice?: number
+  /** Optional: if provided, backend can skip subtotal calculation. */
+  subtotal?: number
 }
 
 export type OrderRequestDto = {
@@ -36,100 +47,149 @@ export type OrderPatchDto = Partial<Omit<OrderRequestDto, "items">> & {
   items?: OrderItemRequestDto[]
 }
 
-function readOrders(): OrderResponseDto[] {
-  return loadJson<OrderResponseDto[]>(DEMO_KEYS.orders, [])
+function normalizePortionType(v: unknown): PortionType | null {
+  const s = String(v ?? "").trim().toUpperCase()
+  if (s === "MEDIUM" || s === "LARGE") return s
+  return null
 }
 
-function writeOrders(list: OrderResponseDto[]) {
-  saveJson(DEMO_KEYS.orders, list)
+function normalizeOrderItems(raw: unknown): OrderItemRequestDto[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const out: OrderItemRequestDto[] = []
+  for (const x of raw) {
+    const r = (x ?? {}) as Record<string, unknown>
+    const productId = Number(r.productId ?? r.productID ?? r.id)
+    const quantity = Number(r.quantity)
+    if (!Number.isFinite(productId) || productId < 1) continue
+    if (!Number.isFinite(quantity) || quantity <= 0) continue
+
+    const portion = normalizePortionType(r.portionType ?? r.portionSize ?? r.portion)
+    const unitPrice = Number(r.unitPrice)
+    const subtotal = Number(r.subtotal ?? r.lineTotal)
+
+    out.push({
+      productId,
+      quantity,
+      portionType: portion,
+      portionSize: portion,
+      unitPrice: Number.isFinite(unitPrice) && unitPrice >= 0 ? unitPrice : undefined,
+      subtotal: Number.isFinite(subtotal) && subtotal >= 0 ? subtotal : undefined,
+    })
+  }
+  return out.length > 0 ? out : undefined
 }
 
-function removeOrderItemsForOrder(orderId: number) {
-  type OI = { orderId: number }
-  const items = loadJson<OI[]>(DEMO_KEYS.orderItems, [])
-  saveJson(
-    DEMO_KEYS.orderItems,
-    items.filter((i) => i.orderId !== orderId),
-  )
+function normalizeOrder(raw: unknown): OrderResponseDto {
+  const r = (raw ?? {}) as Record<string, unknown>
+  const orderDate = String(r.orderDate ?? r.createdAt ?? "") || nowIso()
+  return {
+    orderId: Number(r.orderId ?? r.id),
+    tableNumber: (r.tableNumber as number | null) ?? null,
+    totalAmount: Number(r.totalAmount ?? 0),
+    taxAmount: Number(r.taxAmount ?? 0),
+    discountAmount: Number(r.discountAmount ?? 0),
+    paymentMethod: (String(r.paymentMethod ?? "CASH") as PaymentMethod) ?? "CASH",
+    status: (String(r.status ?? "NEW") as OrderStatus) ?? "NEW",
+    orderType: (String(r.orderType ?? "DINE_IN") as OrderType) ?? "DINE_IN",
+    kitchen: (r.kitchen === "KITCHEN_2" ? "KITCHEN_2" : "KITCHEN_1") as Kitchen,
+    orderDate,
+    createdAt: String(r.createdAt ?? orderDate),
+    updatedAt: (r.updatedAt as string | null) ?? null,
+    items: normalizeOrderItems(r.items ?? r.orderItems ?? r.order_items),
+  }
+}
+
+function toBackendOrderRequest(payload: OrderRequestDto): Record<string, unknown> {
+  const orderItems = toBackendOrderItems(payload.items)
+  return {
+    tableNumber: payload.tableNumber,
+    totalAmount: payload.totalAmount,
+    taxAmount: payload.taxAmount,
+    discountAmount: payload.discountAmount,
+    paymentMethod: payload.paymentMethod,
+    status: payload.status,
+    orderType: payload.orderType,
+    kitchen: payload.kitchen,
+    // Some backends expect this field name.
+    items: orderItems,
+    // Backend commonly expects this field name.
+    orderItems,
+    // Some services use snake_case.
+    order_items: orderItems,
+  }
 }
 
 export async function createOrder(payload: OrderRequestDto): Promise<OrderResponseDto> {
-  const orders = readOrders()
-  const nextId = orders.length > 0 ? Math.max(...orders.map((o) => o.orderId)) + 1 : 1
-  const t = nowIso()
-  const { items, ...rest } = payload
-  const order: OrderResponseDto = {
-    ...rest,
-    orderId: nextId,
-    orderDate: t,
-    createdAt: t,
-    updatedAt: null,
-    items,
-  }
-  writeOrders([order, ...orders])
-  return order
+  const raw = await apiFetch<unknown>("/api/orders", {
+    method: "POST",
+    body: toBackendOrderRequest(payload),
+  })
+  // Backend response may not echo items; keep the request items in memory for UI convenience.
+  const created = normalizeOrder(raw)
+  return { ...created, items: payload.items }
 }
 
 export async function getAllOrders(): Promise<OrderResponseDto[]> {
-  return readOrders()
+  const raw = await apiFetch<unknown[]>("/api/orders", { method: "GET" })
+  return Array.isArray(raw) ? raw.map(normalizeOrder) : []
 }
 
 export async function getOrderById(orderId: number): Promise<OrderResponseDto> {
-  const found = readOrders().find((o) => o.orderId === orderId)
-  if (!found) throw new Error(`Order ${orderId} not found`)
-  return found
+  const raw = await apiFetch<unknown>(`/api/orders/${orderId}`, { method: "GET" })
+  return normalizeOrder(raw)
 }
 
 export async function updateOrder(orderId: number, payload: OrderRequestDto): Promise<OrderResponseDto> {
-  const orders = readOrders()
-  const idx = orders.findIndex((o) => o.orderId === orderId)
-  if (idx < 0) throw new Error(`Order ${orderId} not found`)
-  const t = nowIso()
-  const { items, ...rest } = payload
-  const updated: OrderResponseDto = {
-    ...rest,
-    orderId,
-    orderDate: orders[idx].orderDate,
-    createdAt: orders[idx].createdAt,
-    updatedAt: t,
-    items,
-  }
-  orders[idx] = updated
-  writeOrders(orders)
-  return updated
+  const raw = await apiFetch<unknown>(`/api/orders/${orderId}`, {
+    method: "PUT",
+    body: toBackendOrderRequest(payload),
+  })
+  const updated = normalizeOrder(raw)
+  return { ...updated, items: payload.items }
 }
 
 export async function patchOrder(orderId: number, patch: OrderPatchDto): Promise<OrderResponseDto> {
-  const orders = readOrders()
-  const idx = orders.findIndex((o) => o.orderId === orderId)
-  if (idx < 0) throw new Error(`Order ${orderId} not found`)
-  const cur = orders[idx]
-  const t = nowIso()
-  const nextItems = patch.items !== undefined ? patch.items : cur.items
-  const updated: OrderResponseDto = {
-    tableNumber: patch.tableNumber ?? cur.tableNumber,
-    totalAmount: patch.totalAmount ?? cur.totalAmount,
-    taxAmount: patch.taxAmount ?? cur.taxAmount,
-    discountAmount: patch.discountAmount ?? cur.discountAmount,
-    paymentMethod: patch.paymentMethod ?? cur.paymentMethod,
-    status: patch.status ?? cur.status,
-    orderType: patch.orderType ?? cur.orderType,
-    kitchen: patch.kitchen ?? cur.kitchen,
-    orderId: cur.orderId,
-    orderDate: cur.orderDate,
-    createdAt: cur.createdAt,
-    updatedAt: t,
-    items: nextItems,
+  const body: Record<string, unknown> = { ...patch }
+  if (patch.items !== undefined) {
+    const orderItems = toBackendOrderItems(patch.items)
+    body.items = orderItems
+    body.orderItems = orderItems
+    body.order_items = orderItems
   }
-  orders[idx] = updated
-  writeOrders(orders)
+
+  const raw = await apiFetch<unknown>(`/api/orders/${orderId}`, {
+    method: "PATCH",
+    body,
+  })
+  const updated = normalizeOrder(raw)
+  // If backend doesn't return items, preserve caller-provided patch items.
+  if (patch.items !== undefined) return { ...updated, items: patch.items }
   return updated
 }
 
+function toBackendOrderItems(items: OrderItemRequestDto[]): Record<string, unknown>[] {
+  return items.map((it) => {
+    const portion = it.portionType ?? it.portionSize ?? null
+    const unitPrice = typeof it.unitPrice === "number" && Number.isFinite(it.unitPrice) ? it.unitPrice : undefined
+    const subtotal = typeof it.subtotal === "number" && Number.isFinite(it.subtotal) ? it.subtotal : undefined
+
+    const out: Record<string, unknown> = {
+      productId: it.productId,
+      quantity: it.quantity,
+      portionType: portion,
+      portionSize: portion,
+    }
+
+    if (unitPrice !== undefined) out.unitPrice = unitPrice
+    if (subtotal !== undefined) {
+      out.subtotal = subtotal
+      out.lineTotal = subtotal
+    }
+
+    return out
+  })
+}
+
 export async function deleteOrder(orderId: number): Promise<void> {
-  const orders = readOrders()
-  const next = orders.filter((o) => o.orderId !== orderId)
-  if (next.length === orders.length) throw new Error(`Order ${orderId} not found`)
-  writeOrders(next)
-  removeOrderItemsForOrder(orderId)
+  await apiFetch<void>(`/api/orders/${orderId}`, { method: "DELETE" })
 }

@@ -1,7 +1,5 @@
-import { DEMO_KEYS, loadJson, nowIso, saveJson } from "@/lib/demoPersistence"
-import { defaultMenuItems, type MenuCategory } from "@/lib/menuData"
-import { getAllCategories } from "@/lib/categoriesApi"
-import { getAllInventoryItems } from "@/lib/inventoryApi"
+import { apiFetch } from "@/lib/apiClient"
+import { nowIso } from "@/lib/demoPersistence"
 import type { Kitchen } from "@/lib/ordersApi"
 
 export type PortionSize = "MEDIUM" | "LARGE"
@@ -63,216 +61,200 @@ export type ProductRequestDto = {
   productId?: number
 }
 
-function categoryIdFromMenu(cat: MenuCategory): number {
-  const m: Record<MenuCategory, number> = {
-    starters: 1,
-    mains: 2,
-    desserts: 3,
-    drinks: 4,
-    other: 5,
+export type ProductPatchDto = Partial<ProductRequestDto>
+
+function normalizeImageUrl(raw: unknown): string | null {
+  if (typeof raw !== "string") return null
+  const s = raw.trim()
+  if (!s) return null
+  if (s.startsWith("http://") || s.startsWith("https://")) return s
+  if (s.startsWith("/")) return s
+  return `/${s}`
+}
+
+function normalizePortionPrices(raw: unknown): PortionPrices {
+  if (!raw || typeof raw !== "object") return {}
+  const o = raw as Record<string, unknown>
+  const out: PortionPrices = {}
+  for (const k of ["MEDIUM", "LARGE"] as const) {
+    const v = o[k]
+    const n = typeof v === "number" ? v : Number(v)
+    if (Number.isFinite(n)) out[k] = n
   }
-  return m[cat] ?? 5
+  return out
 }
 
-function seedProductsFromMenu(): ProductResponseDto[] {
-  const t = nowIso()
-  return defaultMenuItems.map((item, i) => {
-    const sellingPrice = item.price
-    const costPrice = Math.round(item.price * 0.5)
-    const station: Kitchen = item.kitchen === "KITCHEN_2" ? "KITCHEN_2" : "KITCHEN_1"
-    const nameSi = item.nameSinhala?.trim() ? item.nameSinhala.trim() : null
-    return {
-      productId: i + 1,
-      categoryId: categoryIdFromMenu(item.category),
-      kitchen: station,
-      name: item.name,
-      nameSinhala: nameSi,
-      description: item.description,
-      costPrice,
-      sellingPrice,
-      imageUrl: item.image || null,
-      isAvailable: true,
-      hasPortionPricing: false,
-      portionPrices: {},
-      recipe: [],
-      effectiveSellingPrice: sellingPrice,
-      skipKitchenTicket: false,
-      createdAt: t,
-      updatedAt: null,
-    }
-  })
+function normalizeRecipe(raw: unknown): ProductRecipeLineResponseDto[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((x) => {
+      const r = x as Record<string, unknown>
+      return {
+        itemId: Number(r.itemId ?? r.id),
+        itemName: r.itemName != null ? String(r.itemName) : undefined,
+        quantity: Number(r.quantity ?? 0),
+      } satisfies ProductRecipeLineResponseDto
+    })
+    .filter((r) => Number.isFinite(r.itemId) && r.itemId >= 1 && Number.isFinite(r.quantity))
 }
 
-function normalizeStoredProduct(p: Partial<ProductResponseDto>): ProductResponseDto {
+function normalizeProduct(raw: unknown): ProductResponseDto {
+  const p = (raw ?? {}) as Record<string, unknown>
+  const portionPrices = normalizePortionPrices(p.portionPrices)
+  const hasPortionPricing = Boolean(p.hasPortionPricing)
+  const sellingPrice = Number(p.sellingPrice ?? 0)
+  const effectiveSellingPrice =
+    typeof p.effectiveSellingPrice === "number"
+      ? p.effectiveSellingPrice
+      : hasPortionPricing && portionPrices.MEDIUM != null
+        ? portionPrices.MEDIUM
+        : Number.isFinite(sellingPrice)
+          ? sellingPrice
+          : null
+
   const kitchen = (p.kitchen === "KITCHEN_2" ? "KITCHEN_2" : "KITCHEN_1") as Kitchen
   const rawSi = p.nameSinhala != null ? String(p.nameSinhala).trim() : ""
   const nameSinhala = rawSi.length > 0 ? rawSi : null
+
+  const imageUrlRaw =
+    p.imageUrl ??
+    p.image_url ??
+    p.imageURL ??
+    p.image ??
+    p.imagePath ??
+    p.image_path ??
+    p.fileUrl ??
+    p.file_url ??
+    p.filePath ??
+    p.file_path
+
   return {
-    ...p,
-    kitchen,
-    nameSinhala,
-    productId: Number(p.productId),
+    productId: Number(p.productId ?? p.id),
     categoryId: Number(p.categoryId),
+    kitchen,
     name: String(p.name ?? ""),
+    nameSinhala,
     description: String(p.description ?? ""),
     costPrice: Number(p.costPrice ?? 0),
-    sellingPrice: Number(p.sellingPrice ?? 0),
-    imageUrl: p.imageUrl ?? null,
+    sellingPrice,
+    imageUrl: normalizeImageUrl(imageUrlRaw),
     isAvailable: p.isAvailable !== false,
-    hasPortionPricing: !!p.hasPortionPricing,
-    portionPrices: p.portionPrices ?? {},
-    recipe: Array.isArray(p.recipe) ? p.recipe : [],
-    effectiveSellingPrice: p.effectiveSellingPrice ?? null,
+    hasPortionPricing,
+    portionPrices,
+    recipe: normalizeRecipe(p.recipe),
+    effectiveSellingPrice: Number.isFinite(effectiveSellingPrice as number) ? (effectiveSellingPrice as number) : null,
     skipKitchenTicket: p.skipKitchenTicket === true,
-    createdAt: String(p.createdAt ?? ""),
-    updatedAt: p.updatedAt ?? null,
-  } as ProductResponseDto
-}
-
-async function ensureProductsSeeded(): Promise<ProductResponseDto[]> {
-  const raw = loadJson<ProductResponseDto[]>(DEMO_KEYS.products, [])
-  if (Array.isArray(raw) && raw.length > 0) {
-    return raw.map((p) => normalizeStoredProduct(p))
+    createdAt: String(p.createdAt ?? "") || nowIso(),
+    updatedAt: (p.updatedAt as string | null) ?? null,
   }
-  await getAllCategories()
-  const seeded = seedProductsFromMenu()
-  saveJson(DEMO_KEYS.products, seeded)
-  return seeded
 }
 
-async function enrichRecipeLines(
-  recipe: ProductRecipeLineRequestDto[],
-): Promise<ProductRecipeLineResponseDto[]> {
-  if (!recipe.length) return []
-  const inv = await getAllInventoryItems()
-  const nameById = new Map(inv.map((i) => [i.itemId, i.itemName]))
-  return recipe.map((r) => ({
-    itemId: r.itemId,
-    quantity: r.quantity,
-    itemName: nameById.get(r.itemId),
-  }))
+function toBackendProductRequest(payload: ProductRequestDto): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    categoryId: payload.categoryId,
+    name: payload.name,
+    description: payload.description,
+    costPrice: payload.costPrice,
+    sellingPrice: payload.sellingPrice,
+    imageUrl: payload.imageUrl,
+    isAvailable: payload.isAvailable,
+    hasPortionPricing: payload.hasPortionPricing,
+    portionPrices: payload.portionPrices,
+    recipe: payload.recipe,
+  }
+  if (payload.productId != null) base.productId = payload.productId
+  return base
 }
 
-function writeProducts(list: ProductResponseDto[]) {
-  saveJson(DEMO_KEYS.products, list)
+function toBackendProductPatch(patch: ProductPatchDto): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (patch.categoryId != null) out.categoryId = patch.categoryId
+  if (patch.name != null) out.name = patch.name
+  if (patch.description != null) out.description = patch.description
+  if (patch.costPrice != null) out.costPrice = patch.costPrice
+  if (patch.sellingPrice != null) out.sellingPrice = patch.sellingPrice
+  if (patch.imageUrl !== undefined) out.imageUrl = patch.imageUrl
+  if (patch.isAvailable != null) out.isAvailable = patch.isAvailable
+  if (patch.hasPortionPricing != null) out.hasPortionPricing = patch.hasPortionPricing
+  if (patch.portionPrices != null) out.portionPrices = patch.portionPrices
+  if (patch.recipe != null) out.recipe = patch.recipe
+  if (patch.productId != null) out.productId = patch.productId
+  return out
 }
 
 export async function getAllProducts(): Promise<ProductResponseDto[]> {
-  return ensureProductsSeeded()
+  const raw = await apiFetch<unknown[]>("/api/products", { method: "GET" })
+  return Array.isArray(raw) ? raw.map(normalizeProduct) : []
 }
 
-function nextProductIdFromList(list: ProductResponseDto[]): number {
-  const numericIds = list.map((p) => Number(p.productId)).filter((n) => Number.isFinite(n) && n >= 1)
-  return numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1
+export async function getProductById(productId: number): Promise<ProductResponseDto> {
+  const raw = await apiFetch<unknown>(`/api/products/${productId}`, { method: "GET" })
+  return normalizeProduct(raw)
 }
 
 export async function createProduct(payload: ProductRequestDto): Promise<ProductResponseDto> {
-  const list = await ensureProductsSeeded()
-  const requested = payload.productId
-  let productId: number
-  if (requested != null) {
-    const n = Number(requested)
-    if (!Number.isInteger(n) || n < 1) throw new Error("Invalid product ID")
-    if (list.some((p) => p.productId === n)) throw new Error(`Product ID ${n} already exists`)
-    productId = n
-  } else {
-    productId = nextProductIdFromList(list)
-  }
-
-  const t = nowIso()
-  const recipe = await enrichRecipeLines(payload.recipe)
-  const effective =
-    payload.hasPortionPricing && payload.portionPrices.MEDIUM != null
-      ? payload.portionPrices.MEDIUM
-      : payload.sellingPrice
-
-  const nameSi =
-    payload.nameSinhala != null && String(payload.nameSinhala).trim().length > 0
-      ? String(payload.nameSinhala).trim()
-      : null
-  const row: ProductResponseDto = {
-    productId,
-    categoryId: payload.categoryId,
+  const raw = await apiFetch<unknown>("/api/products", {
+    method: "POST",
+    body: toBackendProductRequest(payload),
+  })
+  const created = normalizeProduct(raw)
+  // Preserve local-only UI hints (until backend supports them).
+  return {
+    ...created,
     kitchen: payload.kitchen,
-    name: payload.name,
-    nameSinhala: nameSi,
-    description: payload.description,
-    costPrice: payload.costPrice,
-    sellingPrice: payload.sellingPrice,
-    imageUrl: payload.imageUrl,
-    isAvailable: payload.isAvailable,
-    hasPortionPricing: payload.hasPortionPricing,
-    portionPrices: payload.portionPrices,
-    recipe,
-    effectiveSellingPrice: effective,
+    nameSinhala: payload.nameSinhala != null && String(payload.nameSinhala).trim().length > 0 ? String(payload.nameSinhala).trim() : null,
     skipKitchenTicket: !!payload.skipKitchenTicket,
-    createdAt: t,
-    updatedAt: null,
   }
-  writeProducts([...list, row])
-  return row
 }
 
 export async function updateProduct(productId: number, payload: ProductRequestDto): Promise<ProductResponseDto> {
-  const list = await ensureProductsSeeded()
-  const idx = list.findIndex((p) => p.productId === productId)
-  if (idx < 0) throw new Error(`Product ${productId} not found`)
-  const t = nowIso()
-  const recipe = await enrichRecipeLines(payload.recipe)
-  const effective =
-    payload.hasPortionPricing && payload.portionPrices.MEDIUM != null
-      ? payload.portionPrices.MEDIUM
-      : payload.sellingPrice
-
-  const nameSiUpd =
-    payload.nameSinhala != null && String(payload.nameSinhala).trim().length > 0
-      ? String(payload.nameSinhala).trim()
-      : null
-  const updated: ProductResponseDto = {
-    ...list[idx],
-    categoryId: payload.categoryId,
+  const raw = await apiFetch<unknown>(
+    `/api/products/${productId}`,
+    {
+      method: "PUT",
+      // Many backends expect the ID both in the URL and the body for PUT.
+      body: toBackendProductRequest({ ...payload, productId }),
+    },
+  )
+  const updated = normalizeProduct(raw)
+  return {
+    ...updated,
     kitchen: payload.kitchen,
-    name: payload.name,
-    nameSinhala: nameSiUpd,
-    description: payload.description,
-    costPrice: payload.costPrice,
-    sellingPrice: payload.sellingPrice,
-    imageUrl: payload.imageUrl,
-    isAvailable: payload.isAvailable,
-    hasPortionPricing: payload.hasPortionPricing,
-    portionPrices: payload.portionPrices,
-    recipe,
-    effectiveSellingPrice: effective,
+    nameSinhala: payload.nameSinhala != null && String(payload.nameSinhala).trim().length > 0 ? String(payload.nameSinhala).trim() : null,
     skipKitchenTicket: !!payload.skipKitchenTicket,
-    updatedAt: t,
   }
-  list[idx] = updated
-  writeProducts(list)
-  return updated
+}
+
+export async function patchProduct(productId: number, patch: ProductPatchDto): Promise<ProductResponseDto> {
+  const raw = await apiFetch<unknown>(`/api/products/${productId}`, {
+    method: "PATCH",
+    body: toBackendProductPatch(patch),
+  })
+  const updated = normalizeProduct(raw)
+  return {
+    ...updated,
+    kitchen: patch.kitchen ?? updated.kitchen,
+    nameSinhala:
+      patch.nameSinhala !== undefined
+        ? patch.nameSinhala != null && String(patch.nameSinhala).trim().length > 0
+          ? String(patch.nameSinhala).trim()
+          : null
+        : updated.nameSinhala,
+    skipKitchenTicket: patch.skipKitchenTicket ?? updated.skipKitchenTicket,
+  }
 }
 
 export async function deleteProduct(productId: number): Promise<void> {
-  const list = await ensureProductsSeeded()
-  const next = list.filter((p) => p.productId !== productId)
-  if (next.length === list.length) throw new Error(`Product ${productId} not found`)
-  writeProducts(next)
+  await apiFetch<void>(`/api/products/${productId}`, { method: "DELETE" })
 }
 
 export async function uploadProductImage(productId: number, file: File): Promise<ProductResponseDto> {
-  const list = await ensureProductsSeeded()
-  const idx = list.findIndex((p) => p.productId === productId)
-  if (idx < 0) throw new Error(`Product ${productId} not found`)
-
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = String(reader.result)
-      const t = nowIso()
-      list[idx] = { ...list[idx], imageUrl: dataUrl, updatedAt: t }
-      writeProducts(list)
-      resolve(list[idx])
-    }
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read image"))
-    reader.readAsDataURL(file)
+  const form = new FormData()
+  form.append("image", file)
+  const raw = await apiFetch<unknown>(`/api/products/${productId}/image`, {
+    method: "POST",
+    body: form,
+    headers: {},
   })
+  return normalizeProduct(raw)
 }
