@@ -16,6 +16,7 @@ export type AttendanceFilterParams = {
   empId?: number
   startDate?: string
   endDate?: string
+  status?: AttendanceStatus
   page?: number
   size?: number
 }
@@ -90,6 +91,7 @@ export async function filterAttendanceRecords(params: AttendanceFilterParams): P
   if (params.empId != null && Number.isFinite(params.empId)) qp.empId = params.empId
   if (params.startDate) qp.startDate = params.startDate.trim()
   if (params.endDate) qp.endDate = params.endDate.trim()
+  if (params.status) qp.status = params.status
   if (params.page != null) qp.page = params.page
   if (params.size != null) qp.size = params.size
   const resp = await api.get("/attendance/filter", { params: qp })
