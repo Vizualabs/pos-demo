@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/apiClient"
+import axiosClient from "@/axios"
 import { nowIso } from "@/lib/demoPersistence"
 import type { Kitchen } from "@/lib/ordersApi"
 
@@ -183,21 +183,18 @@ function toBackendProductPatch(patch: ProductPatchDto): Record<string, unknown> 
 }
 
 export async function getAllProducts(): Promise<ProductResponseDto[]> {
-  const raw = await apiFetch<unknown[]>("/api/products", { method: "GET" })
-  return Array.isArray(raw) ? raw.map(normalizeProduct) : []
+  const res = await axiosClient.get<unknown[]>("/products")
+  return Array.isArray(res.data) ? res.data.map(normalizeProduct) : []
 }
 
 export async function getProductById(productId: number): Promise<ProductResponseDto> {
-  const raw = await apiFetch<unknown>(`/api/products/${productId}`, { method: "GET" })
-  return normalizeProduct(raw)
+  const res = await axiosClient.get<unknown>(`/products/${productId}`)
+  return normalizeProduct(res.data)
 }
 
 export async function createProduct(payload: ProductRequestDto): Promise<ProductResponseDto> {
-  const raw = await apiFetch<unknown>("/api/products", {
-    method: "POST",
-    body: toBackendProductRequest(payload),
-  })
-  const created = normalizeProduct(raw)
+  const res = await axiosClient.post<unknown>("/products", toBackendProductRequest(payload))
+  const created = normalizeProduct(res.data)
   // Preserve local-only UI hints (until backend supports them).
   return {
     ...created,
@@ -208,15 +205,9 @@ export async function createProduct(payload: ProductRequestDto): Promise<Product
 }
 
 export async function updateProduct(productId: number, payload: ProductRequestDto): Promise<ProductResponseDto> {
-  const raw = await apiFetch<unknown>(
-    `/api/products/${productId}`,
-    {
-      method: "PUT",
-      // Many backends expect the ID both in the URL and the body for PUT.
-      body: toBackendProductRequest({ ...payload, productId }),
-    },
-  )
-  const updated = normalizeProduct(raw)
+  // Many backends expect the ID both in the URL and the body for PUT.
+  const res = await axiosClient.put<unknown>(`/products/${productId}`, toBackendProductRequest({ ...payload, productId }))
+  const updated = normalizeProduct(res.data)
   return {
     ...updated,
     kitchen: payload.kitchen,
@@ -226,11 +217,8 @@ export async function updateProduct(productId: number, payload: ProductRequestDt
 }
 
 export async function patchProduct(productId: number, patch: ProductPatchDto): Promise<ProductResponseDto> {
-  const raw = await apiFetch<unknown>(`/api/products/${productId}`, {
-    method: "PATCH",
-    body: toBackendProductPatch(patch),
-  })
-  const updated = normalizeProduct(raw)
+  const res = await axiosClient.patch<unknown>(`/products/${productId}`, toBackendProductPatch(patch))
+  const updated = normalizeProduct(res.data)
   return {
     ...updated,
     kitchen: patch.kitchen ?? updated.kitchen,
@@ -245,16 +233,14 @@ export async function patchProduct(productId: number, patch: ProductPatchDto): P
 }
 
 export async function deleteProduct(productId: number): Promise<void> {
-  await apiFetch<void>(`/api/products/${productId}`, { method: "DELETE" })
+  await axiosClient.delete(`/products/${productId}`)
 }
 
 export async function uploadProductImage(productId: number, file: File): Promise<ProductResponseDto> {
   const form = new FormData()
   form.append("image", file)
-  const raw = await apiFetch<unknown>(`/api/products/${productId}/image`, {
-    method: "POST",
-    body: form,
-    headers: {},
+  const res = await axiosClient.post<unknown>(`/products/${productId}/image`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
   })
-  return normalizeProduct(raw)
+  return normalizeProduct(res.data)
 }

@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/apiClient"
+import axiosClient from "@/axios"
 import { nowIso } from "@/lib/demoPersistence"
 
 export type MealType = "BREAKFAST" | "LUNCH" | "DINNER"
@@ -53,45 +53,36 @@ function normalizeInvoice(raw: unknown): CustomerMealInvoiceResponseDto {
 export async function createCustomerMealInvoice(
   body: CustomerMealInvoiceRequestDto,
 ): Promise<CustomerMealInvoiceResponseDto> {
-  const raw = await apiFetch<unknown>("/api/customer-meal-invoices", {
-    method: "POST",
-    body,
-  })
-  return normalizeInvoice(raw)
+  const res = await axiosClient.post<unknown>("/customer-meal-invoices", body)
+  return normalizeInvoice(res.data)
 }
 
 export async function getAllCustomerMealInvoices(): Promise<CustomerMealInvoiceResponseDto[]> {
-  const raw = await apiFetch<unknown[]>("/api/customer-meal-invoices", { method: "GET" })
-  return Array.isArray(raw) ? raw.map(normalizeInvoice) : []
+  const res = await axiosClient.get<unknown[]>("/customer-meal-invoices")
+  return Array.isArray(res.data) ? res.data.map(normalizeInvoice) : []
 }
 
 export async function getCustomerMealInvoiceById(invoiceId: number): Promise<CustomerMealInvoiceResponseDto> {
-  const raw = await apiFetch<unknown>(`/api/customer-meal-invoices/${invoiceId}`, { method: "GET" })
-  return normalizeInvoice(raw)
+  const res = await axiosClient.get<unknown>(`/customer-meal-invoices/${invoiceId}`)
+  return normalizeInvoice(res.data)
 }
 
 export async function updateCustomerMealInvoice(
   invoiceId: number,
   body: CustomerMealInvoiceRequestDto,
 ): Promise<CustomerMealInvoiceResponseDto> {
-  const raw = await apiFetch<unknown>(`/api/customer-meal-invoices/${invoiceId}`, {
-    method: "PUT",
-    body,
-  })
-  return normalizeInvoice(raw)
+  const res = await axiosClient.put<unknown>(`/customer-meal-invoices/${invoiceId}`, body)
+  return normalizeInvoice(res.data)
 }
 
 export async function patchCustomerMealInvoice(
   invoiceId: number,
   patch: CustomerMealInvoicePatchDto,
 ): Promise<CustomerMealInvoiceResponseDto> {
-  const raw = await apiFetch<unknown>(`/api/customer-meal-invoices/${invoiceId}`, {
-    method: "PATCH",
-    body: patch,
-  })
-  return normalizeInvoice(raw)
+  const res = await axiosClient.patch<unknown>(`/customer-meal-invoices/${invoiceId}`, patch)
+  return normalizeInvoice(res.data)
 }
 
 export async function deleteCustomerMealInvoice(invoiceId: number): Promise<void> {
-  await apiFetch<void>(`/api/customer-meal-invoices/${invoiceId}`, { method: "DELETE" })
+  await axiosClient.delete(`/customer-meal-invoices/${invoiceId}`)
 }

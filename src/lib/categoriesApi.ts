@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/apiClient"
+import axiosClient from "@/axios"
 import { nowIso } from "@/lib/demoPersistence"
 
 export type CategoryResponseDto = {
@@ -33,8 +33,8 @@ function normalizeCategory(c: unknown): CategoryResponseDto {
 const categoryCache = new Map<number, CategoryResponseDto>()
 
 export async function getAllCategories(): Promise<CategoryResponseDto[]> {
-  const raw = await apiFetch<unknown[]>("/api/categories", { method: "GET" })
-  const list = Array.isArray(raw) ? raw.map(normalizeCategory).filter((c) => Number.isFinite(c.categoryId)) : []
+  const res = await axiosClient.get<unknown[]>("/categories")
+  const list = Array.isArray(res.data) ? res.data.map(normalizeCategory).filter((c) => Number.isFinite(c.categoryId)) : []
   categoryCache.clear()
   for (const c of list) categoryCache.set(c.categoryId, c)
   return list
@@ -44,8 +44,8 @@ export async function getCategoryById(categoryId: number): Promise<CategoryRespo
   const cached = categoryCache.get(categoryId)
   if (cached) return cached
 
-  const raw = await apiFetch<unknown>(`/api/categories/${categoryId}`, { method: "GET" })
-  const found = normalizeCategory(raw)
+  const res = await axiosClient.get<unknown>(`/categories/${categoryId}`)
+  const found = normalizeCategory(res.data)
   categoryCache.set(found.categoryId, found)
   return found
 }
@@ -55,36 +55,27 @@ export async function createCategory(name: string): Promise<CategoryResponseDto>
 }
 
 export async function createCategoryFull(body: CreateCategoryRequestDto): Promise<CategoryResponseDto> {
-  const raw = await apiFetch<unknown>("/api/categories", {
-    method: "POST",
-    body,
-  })
-  const created = normalizeCategory(raw)
+  const res = await axiosClient.post<unknown>("/categories", body)
+  const created = normalizeCategory(res.data)
   categoryCache.set(created.categoryId, created)
   return created
 }
 
 export async function updateCategory(categoryId: number, body: CreateCategoryRequestDto): Promise<CategoryResponseDto> {
-  const raw = await apiFetch<unknown>(`/api/categories/${categoryId}`, {
-    method: "PUT",
-    body,
-  })
-  const updated = normalizeCategory(raw)
+  const res = await axiosClient.put<unknown>(`/categories/${categoryId}`, body)
+  const updated = normalizeCategory(res.data)
   categoryCache.set(updated.categoryId, updated)
   return updated
 }
 
 export async function patchCategory(categoryId: number, patch: PatchCategoryRequestDto): Promise<CategoryResponseDto> {
-  const raw = await apiFetch<unknown>(`/api/categories/${categoryId}`, {
-    method: "PATCH",
-    body: patch,
-  })
-  const updated = normalizeCategory(raw)
+  const res = await axiosClient.patch<unknown>(`/categories/${categoryId}`, patch)
+  const updated = normalizeCategory(res.data)
   categoryCache.set(updated.categoryId, updated)
   return updated
 }
 
 export async function deleteCategory(categoryId: number): Promise<void> {
-  await apiFetch<void>(`/api/categories/${categoryId}`, { method: "DELETE" })
+  await axiosClient.delete(`/categories/${categoryId}`)
   categoryCache.delete(categoryId)
 }

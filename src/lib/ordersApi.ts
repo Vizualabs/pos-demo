@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/apiClient"
+import axiosClient from "@/axios"
 import { nowIso } from "@/lib/demoPersistence"
 
 export type PaymentMethod = "CASH" | "CARD" | "PAYPAL" | "BANK_TRANSFER" | "CASH_ON_DELIVERY"
@@ -120,31 +120,25 @@ function toBackendOrderRequest(payload: OrderRequestDto): Record<string, unknown
 }
 
 export async function createOrder(payload: OrderRequestDto): Promise<OrderResponseDto> {
-  const raw = await apiFetch<unknown>("/api/orders", {
-    method: "POST",
-    body: toBackendOrderRequest(payload),
-  })
+  const res = await axiosClient.post<unknown>("/orders", toBackendOrderRequest(payload))
   // Backend response may not echo items; keep the request items in memory for UI convenience.
-  const created = normalizeOrder(raw)
+  const created = normalizeOrder(res.data)
   return { ...created, items: payload.items }
 }
 
 export async function getAllOrders(): Promise<OrderResponseDto[]> {
-  const raw = await apiFetch<unknown[]>("/api/orders", { method: "GET" })
-  return Array.isArray(raw) ? raw.map(normalizeOrder) : []
+  const res = await axiosClient.get<unknown[]>("/orders")
+  return Array.isArray(res.data) ? res.data.map(normalizeOrder) : []
 }
 
 export async function getOrderById(orderId: number): Promise<OrderResponseDto> {
-  const raw = await apiFetch<unknown>(`/api/orders/${orderId}`, { method: "GET" })
-  return normalizeOrder(raw)
+  const res = await axiosClient.get<unknown>(`/orders/${orderId}`)
+  return normalizeOrder(res.data)
 }
 
 export async function updateOrder(orderId: number, payload: OrderRequestDto): Promise<OrderResponseDto> {
-  const raw = await apiFetch<unknown>(`/api/orders/${orderId}`, {
-    method: "PUT",
-    body: toBackendOrderRequest(payload),
-  })
-  const updated = normalizeOrder(raw)
+  const res = await axiosClient.put<unknown>(`/orders/${orderId}`, toBackendOrderRequest(payload))
+  const updated = normalizeOrder(res.data)
   return { ...updated, items: payload.items }
 }
 
@@ -157,11 +151,8 @@ export async function patchOrder(orderId: number, patch: OrderPatchDto): Promise
     body.order_items = orderItems
   }
 
-  const raw = await apiFetch<unknown>(`/api/orders/${orderId}`, {
-    method: "PATCH",
-    body,
-  })
-  const updated = normalizeOrder(raw)
+  const res = await axiosClient.patch<unknown>(`/orders/${orderId}`, body)
+  const updated = normalizeOrder(res.data)
   // If backend doesn't return items, preserve caller-provided patch items.
   if (patch.items !== undefined) return { ...updated, items: patch.items }
   return updated
@@ -191,5 +182,5 @@ function toBackendOrderItems(items: OrderItemRequestDto[]): Record<string, unkno
 }
 
 export async function deleteOrder(orderId: number): Promise<void> {
-  await apiFetch<void>(`/api/orders/${orderId}`, { method: "DELETE" })
+  await axiosClient.delete(`/orders/${orderId}`)
 }
