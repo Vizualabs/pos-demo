@@ -71,6 +71,7 @@ const Attendance = () => {
   const [rangeStartDate, setRangeStartDate] = useState(daysAgoISO(6));
   const [rangeEndDate, setRangeEndDate] = useState(todayISODate);
   const [rangeEmpId, setRangeEmpId] = useState<string>("all");
+  const [rangeStatus, setRangeStatus] = useState<string>("all");
   const [rangeRows, setRangeRows] = useState<Awaited<ReturnType<typeof filterAttendanceRecords>>>([]);
   const [isRangeLoading, setIsRangeLoading] = useState(false);
   const [draftStatuses, setDraftStatuses] = useState<Record<string, AttendanceStatus>>({});
@@ -145,11 +146,22 @@ const Attendance = () => {
     setIsRangeLoading(true);
     try {
       const empId = rangeEmpId === "all" ? undefined : Number(rangeEmpId);
-      const rows = await filterAttendanceRecords({
+      let rows = await filterAttendanceRecords({
         empId,
         startDate: rangeStartDate,
         endDate: rangeEndDate,
+        status: rangeStatus === "all" ? undefined : (rangeStatus as AttendanceStatus),
       });
+
+      // Client-side fallback if backend doesn't support status or empId filter
+      if (rangeStatus !== "all") {
+        rows = rows.filter((r) => r.status === rangeStatus);
+      }
+      if (rangeEmpId !== "all") {
+        const numericEmpId = Number(rangeEmpId);
+        rows = rows.filter((r) => r.empId === numericEmpId);
+      }
+
       setRangeRows(rows);
     } catch (error) {
       console.error("Could not load attendance range", error);
@@ -161,7 +173,7 @@ const Attendance = () => {
 
   useEffect(() => {
     void refreshRange();
-  }, [rangeStartDate, rangeEndDate, rangeEmpId]);
+  }, [rangeStartDate, rangeEndDate, rangeEmpId, rangeStatus]);
 
   const handleSaveAttendance = async (empId: number | null, date: string) => {
     if (empId == null) {
@@ -396,6 +408,20 @@ const Attendance = () => {
                             })}
                         </select>
                       </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="range-status">Status</Label>
+                        <select
+                          id="range-status"
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={rangeStatus}
+                          onChange={(e) => setRangeStatus(e.target.value)}
+                        >
+                          <option value="all">All statuses</option>
+                          <option value="PRESENT">Present</option>
+                          <option value="LEAVE">Leave</option>
+                          <option value="ABSENT">Absent</option>
+                        </select>
+                      </div>
                       <div className="flex items-end">
                         <Button type="button" className="w-full" onClick={() => void refreshRange()} disabled={isRangeLoading}>
                           {isRangeLoading ? "Loading..." : "Refresh"}
@@ -423,7 +449,9 @@ const Attendance = () => {
                                   <TableCell className="font-mono text-sm">{row.attendanceDate}</TableCell>
                                   <TableCell>{employee?.name ?? `Emp #${row.empId}`}</TableCell>
                                   <TableCell>
-                                    <Badge variant="secondary">{statusLabels[row.status]}</Badge>
+                                    <Badge variant="outline" className={statusHighlightClasses[row.status]}>
+                                      {statusLabels[row.status]}
+                                    </Badge>
                                   </TableCell>
                                 </TableRow>
                               );
