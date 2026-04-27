@@ -10,6 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency, formatCurrencyCompact } from "@/lib/utils";
 import { toast } from "sonner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getAllPayrolls, createPayroll, type PayrollResponseDto } from "@/lib/payrollsApi";
 import {
   createEmployeeRemote,
   deleteEmployeeRemote,
@@ -36,16 +40,16 @@ const Staff = () => {
   const [addOpen, setAddOpen] = useState(false);
 
   const [newStaff, setNewStaff] = useState({
-    username: "",
-    fullName: "",
+    empCode: "",
+    name: "",
     role: "",
     paymentPerDay: "",
   });
 
   const [detailStaff, setDetailStaff] = useState<Employee | null>(null);
   const [detailForm, setDetailForm] = useState({
-    username: "",
-    fullName: "",
+    empCode: "",
+    name: "",
     role: "",
     paymentPerDay: "",
   });
@@ -56,6 +60,14 @@ const Staff = () => {
   const [editingLoanId, setEditingLoanId] = useState<number | null>(null)
   const [loanEditForm, setLoanEditForm] = useState<{ loanAmount: string; loanDate: string; paidAmount: string }>({ loanAmount: '', loanDate: '', paidAmount: '' })
   const [loanNewForm, setLoanNewForm] = useState<{ loanAmount: string; loanDate: string }>({ loanAmount: '', loanDate: '' })
+  const [payrolls, setPayrolls] = useState<PayrollResponseDto[]>([]);
+  const [payrollsLoading, setPayrollsLoading] = useState(false);
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [generateForm, setGenerateForm] = useState({ empId: '', year: new Date().getFullYear().toString(), month: (new Date().getMonth() + 1).toString() });
+  const [generateLoans, setGenerateLoans] = useState<any[]>([]);
+  const [generateLoansLoading, setGenerateLoansLoading] = useState(false);
+  const [generateSubmitting, setGenerateSubmitting] = useState(false);
+  const [payrollsFilter, setPayrollsFilter] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -193,24 +205,115 @@ const Staff = () => {
     }
   }
 
+  const loadPayrolls = async () => {
+    setPayrollsLoading(true);
+    try {
+      const data = await getAllPayrolls();
+      setPayrolls(data);
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not load payrolls.");
+    } finally {
+      setPayrollsLoading(false);
+    }
+  };
+
+  const handleSelectGenerateEmployee = async (empIdStr: string) => {
+    setGenerateForm(s => ({ ...s, empId: empIdStr }));
+    const empId = Number(empIdStr);
+    if (!empId) {
+      setGenerateLoans([]);
+      return;
+    }
+    setGenerateLoansLoading(true);
+    try {
+      const empLoans = await getLoansByEmployee(empId);
+      const activeLoans = empLoans.filter(l => (l.balance ?? 0) > 0);
+      setGenerateLoans(activeLoans.map(l => ({ ...l, inputPaidAmount: '0' })));
+    } catch (err) {
+      console.error(err);
+      toast.error("Could not load loans for employee.");
+    } finally {
+      setGenerateLoansLoading(false);
+    }
+  }
+
+  const handleGeneratePayroll = async () => {
+    const empId = Number(generateForm.empId);
+    const year = Number(generateForm.year);
+    const month = Number(generateForm.month);
+    
+    if (!empId || !year || !month) {
+      toast.error("Employee, Year, and Month are required.");
+      return;
+    }
+
+    const loanPayments = generateLoans
+      .map(l => ({ loanId: l.loanId, paidAmount: Number(l.inputPaidAmount) }))
+      .filter(l => l.paidAmount > 0);
+
+    setGenerateSubmitting(true);
+    try {
+      await createPayroll({
+        empId,
+        payrollYear: year,
+        payrollMonth: month,
+        loans: loanPayments.length > 0 ? loanPayments : undefined
+      });
+      toast.success("Payroll generated successfully.");
+      setGenerateOpen(false);
+      setGenerateForm({ empId: '', year: new Date().getFullYear().toString(), month: (new Date().getMonth() + 1).toString() });
+      setGenerateLoans([]);
+      void loadPayrolls();
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 409) toast.error("Payroll for this employee and month already exists.");
+      else if (status === 400) toast.error("Invalid payroll data (e.g. overpaying a loan).");
+      else toast.error("Could not generate payroll.");
+      console.error(err);
+    } finally {
+      setGenerateSubmitting(false);
+    }
+  };
+
   useEffect(() => {
     void load();
+    void loadPayrolls();
   }, []);
 
   const estimatedMonthlyPayroll = useMemo(() => {
     return staffMembers.reduce((sum, e) => sum + e.paymentPerDay * ASSUMED_WORK_DAYS_PER_MONTH, 0);
   }, [staffMembers]);
 
+  const filteredPayrolls = useMemo(() => {
+    if (!payrollsFilter) return payrolls;
+    const [y, m] = payrollsFilter.split('-');
+    return payrolls.filter(p => p.payrollYear === Number(y) && p.payrollMonth === Number(m));
+  }, [payrolls, payrollsFilter]);
+
+  const payrollStats = useMemo(() => {
+    return filteredPayrolls.reduce(
+      (acc, p) => {
+        acc.totalGross += (p.grossSalary ?? 0);
+        acc.totalDeductions += (p.loanDeductionAmount ?? 0);
+        acc.count += 1;
+        return acc;
+      },
+      { totalGross: 0, totalDeductions: 0, count: 0 }
+    );
+  }, [filteredPayrolls]);
+
   const handleAddStaff = async () => {
     const rate = Number.parseFloat(newStaff.paymentPerDay);
     if (!newStaff.name.trim() || !newStaff.role.trim() || !Number.isFinite(rate) || rate < 0) return;
     try {
       await createEmployeeRemote({
+        empCode: newStaff.empCode.trim(),
         name: newStaff.name.trim(),
         role: newStaff.role.trim(),
         paymentPerDay: rate,
       });
-      setNewStaff({ name: "", role: "", paymentPerDay: "" });
+      setNewStaff({ empCode: "", name: "", role: "", paymentPerDay: "" });
       await load();
       setAddOpen(false);
       toast.success("Employee created")
@@ -250,8 +353,8 @@ const Staff = () => {
   const openEmployeeDetail = (e: Employee) => {
     setDetailStaff(e);
     setDetailForm({
-      username: e.username,
-      fullName: e.fullName,
+      empCode: e.empCode || "",
+      name: e.name,
       role: e.role,
       paymentPerDay: String(e.paymentPerDay),
     });
@@ -313,20 +416,11 @@ const Staff = () => {
               </DialogHeader>
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="staff-username">Username</Label>
-                  <Input
-                    id="staff-username"
-                    value={newStaff.username}
-                    onChange={(e) => setNewStaff({ ...newStaff, username: e.target.value })}
-                    placeholder="e.g. john.doe"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="staff-fullname">Full name</Label>
+                  <Label htmlFor="staff-fullname">Name</Label>
                   <Input
                     id="staff-fullname"
-                    value={newStaff.fullName}
-                    onChange={(e) => setNewStaff({ ...newStaff, fullName: e.target.value })}
+                    value={newStaff.name}
+                    onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
                     placeholder="e.g. John Doe"
                   />
                 </div>
@@ -337,7 +431,6 @@ const Staff = () => {
                     value={newStaff.role}
                     onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value })}
                     placeholder="e.g. Head Chef, Cashier"
-                    disabled
                   />
                 </div>
                 <div className="grid gap-2">
@@ -366,7 +459,14 @@ const Staff = () => {
           </Dialog>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <Tabs defaultValue="staff" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="staff" className="data-[state=active]:bg-green-100 data-[state=active]:text-green-800 dark:data-[state=active]:bg-green-900/40 dark:data-[state=active]:text-green-400">Staff List</TabsTrigger>
+            <TabsTrigger value="payments" className="data-[state=active]:bg-green-100 data-[state=active]:text-green-800 dark:data-[state=active]:bg-green-900/40 dark:data-[state=active]:text-green-400">Employee Payments</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="staff" className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -420,12 +520,12 @@ const Staff = () => {
               <div className="space-y-4">
                 {staffMembers.map((staff) => (
                   <div
-                    key={staff.employeeId}
+                    key={staff.empId ?? staff.employeeId}
                     className="flex items-center justify-between p-4 bg-muted rounded-lg flex-wrap gap-3"
                   >
                     <div className="flex items-center gap-4 flex-1 min-w-[200px]">
                       <div className="w-12 h-12 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-bold text-sm">
-                        {staff.fullName
+                        {staff.name
                           .split(" ")
                           .filter(Boolean)
                           .map((n) => n[0])
@@ -439,16 +539,23 @@ const Staff = () => {
                           className="font-semibold text-left hover:underline decoration-primary underline-offset-2 text-primary"
                           onClick={() => openEmployeeDetail(staff)}
                         >
-                          {staff.fullName}
+                          {staff.name}
                         </button>
-                        <p className="text-sm text-muted-foreground">@{staff.username}</p>
+                        <div className="mt-1 mb-1">
+                          {staff.empCode ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-400 border border-green-200 dark:border-green-800">
+                              {staff.empCode}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-400 border border-red-200 dark:border-red-800">
+                              -
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-muted-foreground">{staff.role}</p>
-                        {staff.empCode ? (
-                          <p className="text-xs text-muted-foreground font-mono">{staff.empCode}</p>
-                        ) : null}
                         {staff.monthlyLoanAdvanceDeductionLkr > 0 ? (
                           <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">
-                            Monthly deduction: {formatCurrency(staff.monthlyLoanAdvanceDeductionLkr)}
+                            Monthly deduction: {formatCurrency(staff.monthlyLoanAdvanceDeductionLkr ?? 0)}
                           </p>
                         ) : null}
                       </div>
@@ -456,7 +563,7 @@ const Staff = () => {
                     <div className="flex items-center gap-4 flex-wrap">
                       <div className="text-right">
                         <p className="text-sm text-muted-foreground">Per day</p>
-                        <p className="font-semibold">{formatCurrency(staff.paymentPerDay)}</p>
+                        <p className="font-semibold">{formatCurrency(staff.paymentPerDay ?? 0)}</p>
                       </div>
                       <Badge variant="secondary" className="whitespace-nowrap">
                         Attendance linked
@@ -494,20 +601,11 @@ const Staff = () => {
             {detailStaff && (
               <div className="grid gap-4 py-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="det-username">Username</Label>
-                  <Input
-                    id="det-username"
-                    value={detailForm.username}
-                    onChange={(e) => setDetailForm((f) => ({ ...f, username: e.target.value }))}
-                    placeholder="e.g. john.doe"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="det-fullname">Full name</Label>
+                  <Label htmlFor="det-fullname">Name</Label>
                   <Input
                     id="det-fullname"
-                    value={detailForm.fullName}
-                    onChange={(e) => setDetailForm((f) => ({ ...f, fullName: e.target.value }))}
+                    value={detailForm.name}
+                    onChange={(e) => setDetailForm((f) => ({ ...f, name: e.target.value }))}
                     placeholder="e.g. John Doe"
                   />
                 </div>
@@ -517,7 +615,6 @@ const Staff = () => {
                     id="det-role"
                     value={detailForm.role}
                     onChange={(e) => setDetailForm((f) => ({ ...f, role: e.target.value }))}
-                    disabled
                   />
                 </div>
                 <div className="grid gap-2">
@@ -597,9 +694,9 @@ const Staff = () => {
                         {loans.map((l) => (
                           <tr key={l.loanId} className="border-b">
                             <td className="px-4 py-3">{l.loanDate}</td>
-                            <td className="px-4 py-3">{formatCurrency(l.loanAmount)}</td>
-                            <td className="px-4 py-3">{formatCurrency(l.paidAmount)}</td>
-                            <td className="px-4 py-3">{formatCurrency(l.balance)}</td>
+                            <td className="px-4 py-3">{formatCurrency(l.loanAmount ?? 0)}</td>
+                            <td className="px-4 py-3">{formatCurrency(l.paidAmount ?? 0)}</td>
+                            <td className="px-4 py-3">{formatCurrency(l.balance ?? 0)}</td>
                             <td className="px-4 py-3">
                               <div className="flex gap-2">
                                 <Button size="sm" variant="destructive" onClick={() => void handleDeleteLoan(l.loanId)}>Delete</Button>
@@ -638,6 +735,195 @@ const Staff = () => {
             </Button>
           </CardContent>
         </Card>
+          </TabsContent>
+
+          <TabsContent value="payments" className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+              <Card>
+                <CardContent className="p-6">
+                  <p className="text-sm text-muted-foreground">Payrolls in period</p>
+                  <p className="text-3xl font-bold mt-1">{payrollStats.count}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-6">
+                  <p className="text-sm text-muted-foreground">Total Gross Payroll</p>
+                  <p className="text-3xl font-bold mt-1 text-green-600 dark:text-green-400">{formatCurrencyCompact(payrollStats.totalGross)}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-6">
+                  <p className="text-sm text-muted-foreground">Total Loan Deductions</p>
+                  <p className="text-3xl font-bold mt-1 text-red-500">{formatCurrencyCompact(payrollStats.totalDeductions)}</p>
+                </CardContent>
+              </Card>
+            </div>
+             <Card>
+               <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                 <div>
+                   <CardTitle>Generated Payrolls</CardTitle>
+                 </div>
+                 <div className="flex items-center gap-3 flex-wrap">
+                   <div className="flex items-center gap-2">
+                     <Label className="whitespace-nowrap">Filter Period:</Label>
+                     <Input 
+                       type="month" 
+                       value={payrollsFilter} 
+                       onChange={e => setPayrollsFilter(e.target.value)} 
+                       className="w-auto h-9"
+                     />
+                     {payrollsFilter && (
+                       <Button variant="ghost" size="sm" onClick={() => setPayrollsFilter('')}>Clear</Button>
+                     )}
+                   </div>
+                  </div>
+                 <Dialog open={generateOpen} onOpenChange={setGenerateOpen}>
+                   <DialogTrigger asChild>
+                     <Button className="gap-2">
+                       <DollarSign className="w-4 h-4" />
+                       Generate Payroll
+                     </Button>
+                   </DialogTrigger>
+                   <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Generate Employee Payroll</DialogTitle>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                            <Label>Employee</Label>
+                            <Select value={generateForm.empId} onValueChange={handleSelectGenerateEmployee}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select employee" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {staffMembers.map(emp => (
+                                  <SelectItem key={emp.empId} value={String(emp.empId)}>
+                                    {emp.name} ({emp.empCode || '-'})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid gap-2">
+                            <Label>Year</Label>
+                            <Input type="number" value={generateForm.year} onChange={e => setGenerateForm(s => ({ ...s, year: e.target.value }))} />
+                          </div>
+                          <div className="grid gap-2">
+                            <Label>Month (1-12)</Label>
+                            <Input type="number" min="1" max="12" value={generateForm.month} onChange={e => setGenerateForm(s => ({ ...s, month: e.target.value }))} />
+                          </div>
+                        </div>
+
+                        {generateForm.empId && (
+                          <div className="mt-4 border rounded-md p-4 bg-muted/50">
+                            <h4 className="font-semibold mb-2">Loan Deductions</h4>
+                            {generateLoansLoading ? (
+                              <p className="text-sm text-muted-foreground">Loading loans...</p>
+                            ) : generateLoans.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">No active loans for this employee.</p>
+                            ) : (
+                              <div className="space-y-3">
+                                {generateLoans.map((l, i) => (
+                                  <div key={l.loanId} className="flex items-center gap-4 bg-background p-3 rounded border">
+                                    <div className="flex-1">
+                                      <p className="font-medium text-sm">Loan #{l.loanId} - {l.loanDate}</p>
+                                      <p className="text-xs text-muted-foreground">Balance: {formatCurrency(l.balance ?? 0)}</p>
+                                    </div>
+                                    <div className="w-32">
+                                      <Label className="text-xs">Deduct Amount</Label>
+                                      <Input 
+                                        type="number" 
+                                        min="0" 
+                                        max={l.balance ?? 0} 
+                                        value={l.inputPaidAmount}
+                                        onChange={e => {
+                                          const val = e.target.value;
+                                          setGenerateLoans(prev => {
+                                            const copy = [...prev];
+                                            copy[i].inputPaidAmount = val;
+                                            return copy;
+                                          })
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" onClick={() => setGenerateOpen(false)}>Cancel</Button>
+                        <Button onClick={() => void handleGeneratePayroll()} disabled={generateSubmitting}>
+                          {generateSubmitting ? "Generating..." : "Generate & Save"}
+                        </Button>
+                      </div>
+                   </DialogContent>
+                 </Dialog>
+               </CardHeader>
+               <CardContent>
+                 {payrollsLoading ? (
+                   <p className="text-sm text-muted-foreground py-8 text-center">Loading payrolls...</p>
+                 ) : filteredPayrolls.length === 0 ? (
+                   <p className="text-sm text-muted-foreground py-8 text-center">No payrolls found.</p>
+                 ) : (
+                   <div className="overflow-x-auto">
+                     <Table>
+                       <TableHeader>
+                         <TableRow>
+                           <TableHead>ID</TableHead>
+                           <TableHead>Employee</TableHead>
+                           <TableHead>Period</TableHead>
+                           <TableHead className="text-center">Present</TableHead>
+                           <TableHead className="text-center">Leave</TableHead>
+                           <TableHead className="text-center">Absent</TableHead>
+                           <TableHead>Per Day</TableHead>
+                           <TableHead>Loan Payments</TableHead>
+                           <TableHead className="text-right">Gross</TableHead>
+                         </TableRow>
+                       </TableHeader>
+                       <TableBody>
+                         {filteredPayrolls.map(p => {
+                           const emp = staffMembers.find(e => e.empId === p.empId);
+                           const empName = emp ? emp.name : `Emp #${p.empId}`;
+                           return (
+                             <TableRow key={p.payrollId}>
+                               <TableCell>#{p.payrollId}</TableCell>
+                               <TableCell className="font-medium">{empName}</TableCell>
+                               <TableCell>{p.payrollYear}-{String(p.payrollMonth).padStart(2, '0')}</TableCell>
+                               <TableCell className="text-center">
+                                 <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                   {p.presentDays ?? 0}
+                                 </span>
+                               </TableCell>
+                               <TableCell className="text-center">
+                                 <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                   {p.leaveDays ?? 0}
+                                 </span>
+                               </TableCell>
+                               <TableCell className="text-center">
+                                 <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-bold rounded-full bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400">
+                                   {p.absentDays ?? 0}
+                                 </span>
+                               </TableCell>
+                               <TableCell>{formatCurrency(p.perDaySalaryAmount ?? 0)}</TableCell>
+                               <TableCell className="text-red-500">{(p.loanDeductionAmount ?? 0) > 0 ? formatCurrency(p.loanDeductionAmount ?? 0) : '-'}</TableCell>
+                               <TableCell className="text-right font-bold text-green-600 dark:text-green-400">
+                                 {formatCurrency(p.grossSalary ?? 0)}
+                               </TableCell>
+                             </TableRow>
+                           );
+                         })}
+                       </TableBody>
+                     </Table>
+                   </div>
+                 )}
+               </CardContent>
+             </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </DashboardLayout>
   );
