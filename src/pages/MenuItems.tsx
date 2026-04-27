@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { DashboardLayout } from "@/components/Layout/DashboardLayout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,7 @@ import { formatItemCode, parseProductIdInput } from "@/lib/itemCode"
 import {
   getAllProducts,
   createProduct,
-  updateProduct,
+  patchProduct,
   deleteProduct,
   uploadProductImage,
   type ProductResponseDto,
@@ -23,6 +23,7 @@ import { createCategory, getAllCategories, type CategoryResponseDto } from "@/li
 import { getAllInventoryItems, type InventoryItemResponseDto } from "@/lib/inventoryApi"
 import type { Kitchen } from "@/lib/ordersApi"
 import { computeRecipeCostLkr } from "@/lib/recipeCost"
+import { apiFetchBlob } from "@/lib/apiClient"
 
 type RecipeLineForm = { itemId: number | ""; quantity: string }
 
@@ -64,6 +65,90 @@ const MenuItems = () => {
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
   const [isSavingCategory, setIsSavingCategory] = useState(false)
+
+  const [imageObjectUrls, setImageObjectUrls] = useState<Record<number, { imageUrl: string; objectUrl: string }>>({})
+
+  const imageObjectUrlsRef = useRef(imageObjectUrls)
+  useEffect(() => {
+    imageObjectUrlsRef.current = imageObjectUrls
+  }, [imageObjectUrls])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const currentIds = new Set(items.map((i) => i.productId))
+
+    // Remove stale entries (items removed or imageUrl changed)
+    setImageObjectUrls((prev) => {
+      let changed = false
+      const next: typeof prev = {}
+      for (const [k, v] of Object.entries(prev)) {
+        const id = Number(k)
+        const item = items.find((i) => i.productId === id)
+
+        if (!currentIds.has(id) || !item?.imageUrl || item.imageUrl !== v.imageUrl) {
+          changed = true
+          URL.revokeObjectURL(v.objectUrl)
+          continue
+        }
+
+        next[id] = v
+      }
+      return changed ? next : prev
+    })
+
+    const toFetch = items.filter((i) => i.imageUrl && !i.imageUrl.startsWith("http"))
+    if (toFetch.length === 0) return
+
+    ;(async () => {
+      for (const item of toFetch) {
+        if (cancelled) return
+
+        const existing = imageObjectUrlsRef.current[item.productId]
+        if (existing?.imageUrl === item.imageUrl) continue
+
+        try {
+          let blob: Blob
+          try {
+            blob = await apiFetchBlob(item.imageUrl!)
+          } catch (e) {
+            // Some backends store the path in imageUrl but only serve the bytes
+            // via a secured API endpoint.
+            blob = await apiFetchBlob(`/api/products/${item.productId}/image`)
+          }
+          const objectUrl = URL.createObjectURL(blob)
+
+          if (cancelled) {
+            URL.revokeObjectURL(objectUrl)
+            return
+          }
+
+          setImageObjectUrls((prev) => {
+            const prevEntry = prev[item.productId]
+            if (prevEntry) URL.revokeObjectURL(prevEntry.objectUrl)
+            return {
+              ...prev,
+              [item.productId]: { imageUrl: item.imageUrl!, objectUrl },
+            }
+          })
+        } catch (e) {
+          console.warn("Failed to load product image", item.productId, item.imageUrl, e)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [items])
+
+  useEffect(() => {
+    return () => {
+      for (const v of Object.values(imageObjectUrlsRef.current)) {
+        URL.revokeObjectURL(v.objectUrl)
+      }
+    }
+  }, [])
 
   const refreshCategories = async () => {
     setIsLoadingCategories(true)
@@ -285,7 +370,44 @@ const MenuItems = () => {
       // 1) Create or update product (JSON)
       let saved: ProductResponseDto
       if (isEditing && existingProduct) {
-        saved = await updateProduct(existingProduct.productId, payload)
+        const prevHasPortionPricing = !!existingProduct.hasPortionPricing
+        const nextHasPortionPricing = !!payload.hasPortionPricing
+
+        const prevMedium = existingProduct.portionPrices?.MEDIUM
+        const prevLarge = existingProduct.portionPrices?.LARGE
+        const nextMedium = payload.portionPrices?.MEDIUM
+        const nextLarge = payload.portionPrices?.LARGE
+
+        const portionPricingChanged = prevHasPortionPricing !== nextHasPortionPricing
+        const portionPricesChanged =
+          nextHasPortionPricing && (prevMedium !== nextMedium || prevLarge !== nextLarge)
+        const shouldSendPortionPricing = portionPricingChanged || portionPricesChanged
+
+        // Workaround: backend PUT path attempts to INSERT portion price rows and
+        // can hit unique constraints; PATCH + omitting unchanged portionPrices
+        // avoids touching that collection on unrelated edits.
+        const patch = {
+          categoryId: payload.categoryId,
+          kitchen: payload.kitchen,
+          name: payload.name,
+          nameSinhala: payload.nameSinhala,
+          description: payload.description,
+          costPrice: payload.costPrice,
+          sellingPrice: payload.sellingPrice,
+          imageUrl: payload.imageUrl,
+          isAvailable: payload.isAvailable,
+          recipe: payload.recipe,
+          skipKitchenTicket: payload.skipKitchenTicket,
+          productId: existingProduct.productId,
+          ...(shouldSendPortionPricing
+            ? {
+                hasPortionPricing: nextHasPortionPricing,
+                portionPrices: nextHasPortionPricing ? payload.portionPrices : {},
+              }
+            : {}),
+        }
+
+        saved = await patchProduct(existingProduct.productId, patch)
         setItems((prev) => prev.map((p) => (p.productId === saved.productId ? saved : p)))
         toast.success(`Item ${formatItemCode(saved.productId)} updated`)
       } else {
@@ -876,23 +998,40 @@ const MenuItems = () => {
                         </div>
                       </div>
 
-                      <div className="aspect-video rounded-lg overflow-hidden bg-muted flex items-center justify-center">
-                        {item.imageUrl ? (
-                          <img
-                            src={item.imageUrl}
-                            alt={item.name}
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.style.display = "none"
-                            }}
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center text-muted-foreground">
-                            <UtensilsCrossed className="h-5 w-5 mb-1" />
-                            <span>No image available</span>
+                      {(() => {
+                        const rawUrl = item.imageUrl
+                        const resolvedUrl =
+                          rawUrl && rawUrl.startsWith("http")
+                            ? rawUrl
+                            : rawUrl
+                              ? (imageObjectUrls[item.productId]?.objectUrl ?? rawUrl)
+                              : undefined
+
+                        const hasImage = Boolean(resolvedUrl)
+
+                        return (
+                          <div className="aspect-video rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+                            <img
+                              src={resolvedUrl}
+                              alt={item.name}
+                              className="h-full w-full object-cover"
+                              style={{ display: hasImage ? undefined : "none" }}
+                              onError={(e) => {
+                                e.currentTarget.style.display = "none"
+                                const fallback = e.currentTarget.nextElementSibling as HTMLElement | null
+                                if (fallback) fallback.style.display = "flex"
+                              }}
+                            />
+                            <div
+                              className="flex flex-col items-center justify-center text-muted-foreground"
+                              style={{ display: hasImage ? "none" : "flex" }}
+                            >
+                              <img src="/placeholder.svg" alt="" className="h-10 w-10 opacity-70" />
+                              <span className="mt-1 text-xs">No image available</span>
+                            </div>
                           </div>
-                        )}
-                      </div>
+                        )
+                      })()}
                     </CardContent>
                   </Card>
                 ))}

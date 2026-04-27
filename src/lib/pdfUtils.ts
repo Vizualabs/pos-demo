@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import type { CustomerInvoice } from '@/lib/invoicesApi'
+import type { CustomerMealInvoiceResponseDto } from '@/lib/customerMealInvoicesApi'
 import { formatCurrency } from '@/lib/utils'
 
 export type GeneratePdfOptions = {
@@ -271,6 +272,143 @@ export function generateCustomerInvoicePdf(invoice: CustomerInvoice): void {
   pdf.text(`Questions? Quote invoice ${invoice.invoiceId}.`, W / 2, y, { align: 'center' })
 
   const safeFile = `${invoice.invoiceId.replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf`
+  pdf.save(safeFile)
+}
+
+/** Customer meal invoice as a native vector PDF (no html2canvas). */
+export function generateCustomerMealInvoicePdf(invoice: CustomerMealInvoiceResponseDto): void {
+  const pdf = new jsPDF('p', 'mm', 'a4')
+  const W = 210
+  const M = { L: 16, R: 16, T: 14 }
+  const innerW = W - M.L - M.R
+  let y = M.T
+
+  const bottomSafe = 278
+  const newPageIfNeeded = (needMm: number) => {
+    if (y + needMm > bottomSafe) {
+      pdf.addPage()
+      y = M.T
+    }
+  }
+
+  const isPaid = invoice.status === 'PAID'
+  const invoiceNo = String(invoice.invoiceNo || invoice.invoiceId)
+
+  // Top accent bar
+  pdf.setFillColor(2, 132, 199)
+  pdf.rect(M.L, y, innerW, 1.5, 'F')
+  y += 8
+
+  pdf.setTextColor(100, 116, 139)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(7)
+  pdf.text('CUSTOMER MEAL INVOICE', M.L, y)
+  y += 4.5
+
+  pdf.setTextColor(15, 23, 42)
+  pdf.setFontSize(18)
+  pdf.setFont('helvetica', 'bold')
+  pdf.text('Invoice', M.L, y)
+  pdf.setFont('courier', 'normal')
+  pdf.setFontSize(9)
+  pdf.setTextColor(100, 116, 139)
+  pdf.text(invoiceNo, M.L + innerW, y, { align: 'right' })
+  y += 10
+
+  const wLeft = innerW * 0.56
+  const wRight = innerW - wLeft - 3
+  const xRight = M.L + wLeft + 3
+
+  const cust = String(invoice.customerName ?? '').trim() || 'Customer'
+  const dateStr = formatInvoiceDatePdf(invoice.createdAt)
+  const paidAtStr = invoice.paidAt ? formatInvoiceDatePdf(invoice.paidAt) : '—'
+
+  const leftLines = pdf.splitTextToSize(cust, wLeft - 6)
+  const rightLines = pdf.splitTextToSize(dateStr, wRight - 4)
+  const boxH = Math.max(22, 9 + leftLines.length * 4.8, 9 + rightLines.length * 4.2)
+
+  pdf.setFillColor(241, 245, 249)
+  pdf.setDrawColor(226, 232, 240)
+  pdf.rect(M.L, y, wLeft, boxH, 'FD')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(7)
+  pdf.setTextColor(100, 116, 139)
+  pdf.text('CUSTOMER', M.L + 3, y + 4.5)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(11)
+  pdf.setTextColor(15, 23, 42)
+  pdf.text(leftLines, M.L + 3, y + 9)
+
+  pdf.setFillColor(255, 255, 255)
+  pdf.rect(xRight, y, wRight, boxH, 'FD')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(7)
+  pdf.setTextColor(100, 116, 139)
+  pdf.text('ISSUE DATE', xRight + 2, y + 4.5)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(8)
+  pdf.setTextColor(15, 23, 42)
+  pdf.text(rightLines, xRight + 2, y + 9)
+
+  y += boxH + 6
+
+  newPageIfNeeded(14)
+  if (isPaid) {
+    pdf.setFillColor(220, 252, 231)
+    pdf.setDrawColor(167, 243, 208)
+    pdf.setTextColor(22, 101, 52)
+  } else {
+    pdf.setFillColor(254, 243, 199)
+    pdf.setDrawColor(253, 224, 71)
+    pdf.setTextColor(120, 53, 15)
+  }
+  const statusText = isPaid ? 'PAID' : 'UNPAID'
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(8)
+  const pillW = pdf.getTextWidth(statusText) + 8
+  pdf.roundedRect(M.L, y, pillW, 6.5, 1.2, 1.2, 'FD')
+  pdf.text(statusText, M.L + 4, y + 4.5)
+  pdf.setTextColor(15, 23, 42)
+  y += 11
+
+  newPageIfNeeded(28)
+  pdf.setFillColor(241, 245, 249)
+  pdf.setDrawColor(226, 232, 240)
+  pdf.rect(M.L, y, innerW, 8, 'FD')
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(7)
+  pdf.setTextColor(100, 116, 139)
+  pdf.text('MEAL TYPE', M.L + 2, y + 5.2)
+  pdf.text('QTY', M.L + innerW - 60, y + 5.2)
+  pdf.text('UNIT PRICE', M.L + innerW - 40, y + 5.2)
+  pdf.text('TOTAL', M.L + innerW - 3, y + 5.2, { align: 'right' })
+  y += 8
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(10)
+  pdf.setTextColor(15, 23, 42)
+  pdf.text(String(invoice.mealType), M.L + 2, y + 6)
+  pdf.text(String(invoice.quantity), M.L + innerW - 60, y + 6)
+  pdf.text(formatCurrency(invoice.unitPrice), M.L + innerW - 40, y + 6)
+  pdf.text(formatCurrency(invoice.total), M.L + innerW - 3, y + 6, { align: 'right' })
+  y += 14
+
+  newPageIfNeeded(24)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setFontSize(9)
+  pdf.setTextColor(100, 116, 139)
+  pdf.text('PAID AT', M.L, y)
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(9)
+  pdf.setTextColor(15, 23, 42)
+  pdf.text(paidAtStr, M.L + 22, y)
+  y += 10
+
+  pdf.setFontSize(7)
+  pdf.setTextColor(120, 120, 120)
+  pdf.text(`Generated for invoice ${invoiceNo}.`, W / 2, 285, { align: 'center' })
+
+  const safeFile = `${invoiceNo.replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf`
   pdf.save(safeFile)
 }
 

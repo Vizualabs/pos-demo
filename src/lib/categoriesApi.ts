@@ -1,4 +1,5 @@
-import { DEMO_KEYS, loadJson, nowIso, saveJson } from "@/lib/demoPersistence"
+import { apiFetch } from "@/lib/apiClient"
+import { nowIso } from "@/lib/demoPersistence"
 
 export type CategoryResponseDto = {
   categoryId: number
@@ -15,6 +16,8 @@ export type CreateCategoryRequestDto = {
   isActive: boolean
 }
 
+export type PatchCategoryRequestDto = Partial<CreateCategoryRequestDto>
+
 function normalizeCategory(c: unknown): CategoryResponseDto {
   const x = c as Record<string, unknown>
   return {
@@ -22,38 +25,17 @@ function normalizeCategory(c: unknown): CategoryResponseDto {
     name: String(x.name ?? ""),
     iconUrl: (x.iconUrl as string | null) ?? null,
     isActive: (x.isActive as boolean) ?? (x.IsActive as boolean) ?? (x.active as boolean) ?? true,
-    createdAt: String(x.createdAt ?? ""),
+    createdAt: String(x.createdAt ?? "") || nowIso(),
     updatedAt: (x.updatedAt as string | null) ?? null,
   }
 }
 
 const categoryCache = new Map<number, CategoryResponseDto>()
 
-const DEFAULT_CATEGORIES: CategoryResponseDto[] = [
-  { categoryId: 1, name: "Starters", iconUrl: null, isActive: true, createdAt: nowIso(), updatedAt: null },
-  { categoryId: 2, name: "Mains", iconUrl: null, isActive: true, createdAt: nowIso(), updatedAt: null },
-  { categoryId: 3, name: "Desserts", iconUrl: null, isActive: true, createdAt: nowIso(), updatedAt: null },
-  { categoryId: 4, name: "Drinks", iconUrl: null, isActive: true, createdAt: nowIso(), updatedAt: null },
-  { categoryId: 5, name: "Other", iconUrl: null, isActive: true, createdAt: nowIso(), updatedAt: null },
-]
-
-function readCategories(): CategoryResponseDto[] {
-  const raw = loadJson<unknown[]>(DEMO_KEYS.categories, [])
-  if (!Array.isArray(raw) || raw.length === 0) {
-    saveJson(DEMO_KEYS.categories, DEFAULT_CATEGORIES)
-    return [...DEFAULT_CATEGORIES]
-  }
-  return raw.map(normalizeCategory).filter((c) => Number.isFinite(c.categoryId))
-}
-
-function writeCategories(list: CategoryResponseDto[]) {
-  saveJson(DEMO_KEYS.categories, list)
-  categoryCache.clear()
-  for (const c of list) categoryCache.set(c.categoryId, c)
-}
-
 export async function getAllCategories(): Promise<CategoryResponseDto[]> {
-  const list = readCategories()
+  const raw = await apiFetch<unknown[]>("/api/categories", { method: "GET" })
+  const list = Array.isArray(raw) ? raw.map(normalizeCategory).filter((c) => Number.isFinite(c.categoryId)) : []
+  categoryCache.clear()
   for (const c of list) categoryCache.set(c.categoryId, c)
   return list
 }
@@ -62,26 +44,47 @@ export async function getCategoryById(categoryId: number): Promise<CategoryRespo
   const cached = categoryCache.get(categoryId)
   if (cached) return cached
 
-  const list = readCategories()
-  const found = list.find((c) => c.categoryId === categoryId)
-  if (!found) throw new Error(`Category ${categoryId} not found`)
+  const raw = await apiFetch<unknown>(`/api/categories/${categoryId}`, { method: "GET" })
+  const found = normalizeCategory(raw)
   categoryCache.set(found.categoryId, found)
   return found
 }
 
 export async function createCategory(name: string): Promise<CategoryResponseDto> {
-  const list = readCategories()
-  const nextId = list.length > 0 ? Math.max(...list.map((c) => c.categoryId)) + 1 : 1
-  const t = nowIso()
-  const created: CategoryResponseDto = {
-    categoryId: nextId,
-    name: name.trim(),
-    iconUrl: null,
-    isActive: true,
-    createdAt: t,
-    updatedAt: null,
-  }
-  writeCategories([...list, created])
+  return createCategoryFull({ name: name.trim(), iconUrl: null, isActive: true })
+}
+
+export async function createCategoryFull(body: CreateCategoryRequestDto): Promise<CategoryResponseDto> {
+  const raw = await apiFetch<unknown>("/api/categories", {
+    method: "POST",
+    body,
+  })
+  const created = normalizeCategory(raw)
   categoryCache.set(created.categoryId, created)
   return created
+}
+
+export async function updateCategory(categoryId: number, body: CreateCategoryRequestDto): Promise<CategoryResponseDto> {
+  const raw = await apiFetch<unknown>(`/api/categories/${categoryId}`, {
+    method: "PUT",
+    body,
+  })
+  const updated = normalizeCategory(raw)
+  categoryCache.set(updated.categoryId, updated)
+  return updated
+}
+
+export async function patchCategory(categoryId: number, patch: PatchCategoryRequestDto): Promise<CategoryResponseDto> {
+  const raw = await apiFetch<unknown>(`/api/categories/${categoryId}`, {
+    method: "PATCH",
+    body: patch,
+  })
+  const updated = normalizeCategory(raw)
+  categoryCache.set(updated.categoryId, updated)
+  return updated
+}
+
+export async function deleteCategory(categoryId: number): Promise<void> {
+  await apiFetch<void>(`/api/categories/${categoryId}`, { method: "DELETE" })
+  categoryCache.delete(categoryId)
 }

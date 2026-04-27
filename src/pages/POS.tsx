@@ -300,9 +300,11 @@ const POS = () => {
       return null
     }
 
-    const itemsAggMap = new Map<number, number>()
-    for (const c of cart) itemsAggMap.set(c.productId, (itemsAggMap.get(c.productId) ?? 0) + c.quantity)
-    const items = Array.from(itemsAggMap.entries()).map(([productId, quantity]) => ({ productId, quantity }))
+    const items = cart.map((c) => ({
+      productId: c.productId,
+      quantity: c.quantity,
+      portionType: c.portionSize ?? null,
+    }))
 
     let tableNumber: number | null = null
     if (orderType === "DINE_IN") {

@@ -162,7 +162,8 @@ export default function Orders() {
   const refresh = async () => {
     setIsLoading(true)
     try {
-      const [ordersRes, orderItemsRes, productsRes] = await Promise.all([getAllOrders(), getAllOrderItems(), getAllProducts()])
+      const [ordersRes, productsRes] = await Promise.all([getAllOrders(), getAllProducts()])
+      const orderItemsRes: OrderItemResponseDto[] = []
 
       const productNameById = new Map<number, string>()
       for (const p of productsRes) productNameById.set(p.productId, p.name)
