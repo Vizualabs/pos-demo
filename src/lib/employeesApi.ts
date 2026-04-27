@@ -7,8 +7,7 @@ export type Employee = {
   /** Server numeric id (empId / id) if available */
   empId?: number
   employeeId: string
-  username: string
-  fullName: string
+  name: string
   role: string
   paymentPerDay: number
   /** Manually set monthly recovery (loans / salary advance); subtracted from gross in payroll. */
@@ -23,8 +22,8 @@ export { PAID_LEAVE_DAYS_PER_MONTH }
 const DEFAULT_EMPLOYEES: Employee[] = [
   {
     employeeId: "EMP-DEMO-1",
-    username: "nperera",
-    fullName: "Nishantha Perera",
+    empCode: "EMP001",
+    name: "Nishantha Perera",
     role: "Head Chef",
     paymentPerDay: 4500,
     monthlyLoanAdvanceDeductionLkr: 0,
@@ -32,8 +31,8 @@ const DEFAULT_EMPLOYEES: Employee[] = [
   },
   {
     employeeId: "EMP-DEMO-2",
-    username: "swickrama",
-    fullName: "Sanduni Wickramasinghe",
+    empCode: "EMP002",
+    name: "Sanduni Wickramasinghe",
     role: "Cashier",
     paymentPerDay: 3200,
     monthlyLoanAdvanceDeductionLkr: 0,
@@ -41,14 +40,13 @@ const DEFAULT_EMPLOYEES: Employee[] = [
   },
 ]
 
-function normalizeEmployee(e: Partial<Employee> & { employeeId: string }): Employee {
+function normalizeEmployee(e: Partial<Employee> & { employeeId: string } & any): Employee {
   const ded = e.monthlyLoanAdvanceDeductionLkr
   return {
     empCode: e.empCode !== undefined && e.empCode !== null ? String(e.empCode) : undefined,
     empId: typeof e.empId === 'number' && Number.isFinite(e.empId) ? e.empId : undefined,
     employeeId: String(e.employeeId),
-    username: String(e.username ?? "").trim() || "unnamed_user",
-    fullName: String(e.fullName ?? "").trim() || "Unnamed",
+    name: String(e.name ?? e.fullName ?? "").trim() || "Unnamed",
     role: String(e.role ?? "").trim() || "—",
     paymentPerDay: Math.max(0, Number(e.paymentPerDay ?? 0)),
     monthlyLoanAdvanceDeductionLkr:
@@ -73,31 +71,21 @@ function readAll(): Employee[] {
   const migrated = raw.map((e: any) => {
     const leg = LEGACY_SINHALA_TO_ENGLISH[e.employeeId]
     // Handle legacy migration from Sinhala to English
-    if (leg && e.fullName === leg.from) {
+    if (leg && (e.fullName === leg.from || e.name === leg.from)) {
       changed = true
-      return { ...e, fullName: leg.to }
+      return { ...e, name: leg.to }
     }
-    // Migrate old 'name' field to 'fullName'
-    if (e.name && !e.fullName) {
+    // Migrate old 'fullName' field to 'name'
+    if (e.fullName && !e.name) {
       changed = true
-      return { ...e, fullName: e.name }
-    }
-    // Generate username from fullName if missing
-    if (!e.username && e.fullName) {
-      changed = true
-      const username = e.fullName
-        .toLowerCase()
-        .split(" ")
-        .filter(Boolean)
-        .join(".")
-      return { ...e, username }
+      return { ...e, name: e.fullName }
     }
     return e
   })
   const normalized = migrated.map((e) => normalizeEmployee(e as Partial<Employee> & { employeeId: string }))
   const needSchemaUpgrade =
     raw.some((e: any) => (e as { monthlyLoanAdvanceDeductionLkr?: number }).monthlyLoanAdvanceDeductionLkr == null) ||
-    raw.some((e: any) => !e.username || !e.fullName)
+    raw.some((e: any) => !e.name)
   if (changed || needSchemaUpgrade) saveJson(DEMO_KEYS.employees, normalized)
   return normalized
 }
@@ -119,8 +107,8 @@ export async function getAllEmployeesRemote(): Promise<Employee[]> {
   const data = resp?.data ?? []
   if (!Array.isArray(data)) throw new Error('Invalid employees response')
 
-  const mapped = data.map((d: any) => {
-    const employeeId = d?.empCode ?? d?.employeeId ?? (d?.id != null ? String(d.id) : `EMP-${Date.now()}`)
+  const mapped = data.map((d: any, index: number) => {
+    const employeeId = d?.id != null ? String(d.id) : (d?.employeeId ?? `EMP-${Date.now()}-${index}`)
     const empId = d?.empId ?? d?.id ?? d?.emp_id ?? undefined
     return normalizeEmployee({
       employeeId: String(employeeId),
@@ -143,7 +131,7 @@ export async function getAllEmployeesRemote(): Promise<Employee[]> {
 export async function getEmployeeByIdRemote(id: string | number): Promise<Employee> {
   const resp = await api.get(`/employees/${id}`)
   const d = resp?.data ?? {}
-  const employeeId = d?.empCode ?? d?.employeeId ?? (d?.id != null ? String(d.id) : String(id))
+  const employeeId = d?.id != null ? String(d.id) : (d?.employeeId ?? String(id))
     const empId = d?.empId ?? d?.id ?? d?.emp_id ?? undefined
     return normalizeEmployee({
       employeeId: String(employeeId),
@@ -165,8 +153,8 @@ export async function createEmployee(
   const list = readAll()
   const row = normalizeEmployee({
     employeeId: `EMP-${Date.now()}`,
-    username: input.username.trim(),
-    fullName: input.fullName.trim(),
+    empCode: input.empCode,
+    name: input.name.trim(),
     role: input.role.trim(),
     paymentPerDay: Math.max(0, input.paymentPerDay),
     monthlyLoanAdvanceDeductionLkr:
@@ -189,16 +177,19 @@ export async function createEmployeeRemote(
     monthlyLoanAdvanceDeductionLkr?: number
   },
 ): Promise<Employee> {
-  const payload = {
+  const payload: Record<string, any> = {
     name: input.name.trim(),
     role: input.role.trim(),
     paymentPerDay: Number(input.paymentPerDay),
+  }
+  if (input.empCode) {
+    payload.empCode = input.empCode.trim()
   }
 
   const resp = await api.post('/employees', payload)
   const data = resp?.data ?? {}
 
-  const employeeId = data?.empCode ?? data?.employeeId ?? (data?.id != null ? String(data.id) : `EMP-${Date.now()}`)
+  const employeeId = data?.id != null ? String(data.id) : (data?.employeeId ?? `EMP-${Date.now()}-${Math.floor(Math.random()*10000)}`)
   const name = data?.name ?? payload.name
   const role = data?.role ?? payload.role
   const paymentPerDay = Number(data?.paymentPerDay ?? data?.payment_per_day ?? payload.paymentPerDay ?? 0)
@@ -225,7 +216,7 @@ export async function createEmployeeRemote(
 
 export async function patchEmployee(
   employeeId: string,
-  patch: Partial<Pick<Employee, "username" | "fullName" | "role" | "paymentPerDay" | "monthlyLoanAdvanceDeductionLkr">>,
+  patch: Partial<Pick<Employee, "name" | "role" | "paymentPerDay" | "monthlyLoanAdvanceDeductionLkr" | "empCode">>,
 ): Promise<Employee> {
   const list = readAll().map((e) => normalizeEmployee(e))
   const idx = list.findIndex((e) => e.employeeId === employeeId)
@@ -233,8 +224,8 @@ export async function patchEmployee(
   const cur = list[idx]
   const next = normalizeEmployee({
     ...cur,
-    username: patch.username !== undefined ? patch.username : cur.username,
-    fullName: patch.fullName !== undefined ? patch.fullName : cur.fullName,
+    name: patch.name !== undefined ? patch.name : cur.name,
+    empCode: patch.empCode !== undefined ? patch.empCode : cur.empCode,
     role: patch.role !== undefined ? patch.role : cur.role,
     paymentPerDay: patch.paymentPerDay !== undefined ? patch.paymentPerDay : cur.paymentPerDay,
     monthlyLoanAdvanceDeductionLkr:
@@ -261,7 +252,7 @@ export async function patchEmployeeRemote(
     const s = String(key)
     if (/^[0-9]+$/.test(s)) return Number(s)
     const list = readAll()
-    const found = list.find((e) => e.employeeId === s || e.empCode === s)
+    const found = list.find((e) => e.employeeId === s || String(e.empId) === s)
     if (found && typeof found.empId === 'number') return found.empId
     throw new Error(`Could not resolve empId for ${s}`)
   }
@@ -269,7 +260,7 @@ export async function patchEmployeeRemote(
   const empId = resolveEmpId(employeeKey)
 
   // Only send fields allowed for update from the UI
-  const allowed = ['name', 'role', 'paymentPerDay']
+  const allowed = ['name', 'empCode', 'role', 'paymentPerDay']
   const payload: Record<string, unknown> = {}
   for (const k of allowed) {
     if ((patch as any)[k] !== undefined) payload[k] = (patch as any)[k]
@@ -279,7 +270,7 @@ export async function patchEmployeeRemote(
   const resp = await api.patch(`/employees/${empId}`, payload)
   const data = resp?.data ?? {}
 
-  const resolvedId = data?.empCode ?? data?.employeeId ?? (data?.id != null ? String(data.id) : String(empId))
+  const resolvedId = data?.id != null ? String(data.id) : (data?.employeeId ?? String(empId))
   const empIdResolved = data?.empId ?? data?.id ?? data?.emp_id ?? empId
   const row = normalizeEmployee({
     employeeId: String(resolvedId),
@@ -311,7 +302,7 @@ export async function deleteEmployeeRemote(employeeKey: string | number): Promis
     const s = String(key)
     if (/^[0-9]+$/.test(s)) return Number(s)
     const list = readAll()
-    const found = list.find((e) => e.employeeId === s || e.empCode === s)
+    const found = list.find((e) => e.employeeId === s || String(e.empId) === s)
     if (found && typeof found.empId === 'number') return found.empId
     throw new Error(`Could not resolve empId for ${s}`)
   }

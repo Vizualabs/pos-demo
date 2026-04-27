@@ -48,6 +48,12 @@ const statusHighlightClasses: Record<AttendanceStatus, string> = {
   ABSENT: "border-rose-300 bg-rose-50 text-rose-700",
 };
 
+const statusRowHighlightClasses: Record<AttendanceStatus, string> = {
+  PRESENT: "bg-emerald-50/40",
+  LEAVE: "bg-amber-50/40",
+  ABSENT: "bg-rose-50/40",
+};
+
 function daysAgoISO(days: number) {
   const d = new Date();
   d.setDate(d.getDate() - days);
@@ -272,7 +278,6 @@ const Attendance = () => {
               <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3">
                 <TabsTrigger value="daily">Daily marking</TabsTrigger>
                 <TabsTrigger value="range">Date range view</TabsTrigger>
-                <TabsTrigger value="payroll">Monthly payroll (demo)</TabsTrigger>
               </TabsList>
 
               <TabsContent value="daily">
@@ -306,7 +311,7 @@ const Attendance = () => {
                             const key = rowKey(empId, selectedDate);
                             const isSaving = Boolean(savingRows[key]);
                             return (
-                              <TableRow key={employeeRenderKey(emp, index, "daily") }>
+                              <TableRow key={employeeRenderKey(emp, index, "daily") } className={statusRowHighlightClasses[currentStatus]}>
                                 <TableCell className="font-medium">{emp.name}</TableCell>
                                 <TableCell>{emp.role}</TableCell>
                                 <TableCell className="text-right font-mono text-sm">{formatCurrency(emp.paymentPerDay)}</TableCell>
@@ -437,72 +442,6 @@ const Attendance = () => {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="payroll">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Monthly payroll estimate</CardTitle>
-                    <CardDescription>
-                      Paid days = present + min(leave, {PAID_LEAVE_DAYS_PER_MONTH}) in the month. Gross = paid days × daily rate.
-                      Net = gross minus each employee&apos;s monthly loan/advance deduction (set under Staff - click the name).
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid gap-2 max-w-xs">
-                      <Label htmlFor="pay-month">Month</Label>
-                      <Input id="pay-month" type="month" value={payrollMonth} onChange={(e) => setPayrollMonth(e.target.value)} />
-                    </div>
-
-                    <div className="w-full overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Employee</TableHead>
-                            <TableHead className="text-center">Present</TableHead>
-                            <TableHead className="text-center">Leave</TableHead>
-                            <TableHead className="text-center">Absent</TableHead>
-                            <TableHead className="text-center">Paid leave days</TableHead>
-                            <TableHead className="text-center">Unpaid leave</TableHead>
-                            <TableHead className="text-right">Paid days</TableHead>
-                            <TableHead className="text-right whitespace-nowrap">Gross (LKR)</TableHead>
-                            <TableHead className="text-right whitespace-nowrap">Deduction</TableHead>
-                            <TableHead className="text-right whitespace-nowrap">Net (LKR)</TableHead>
-                            <TableHead className="text-right w-[1%]">Slip</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {payrollRows.map((row, index) => (
-                            <TableRow key={employeeRenderKey(row.emp, index, "payroll") }>
-                              <TableCell className="font-medium">{row.emp.name}</TableCell>
-                              <TableCell className="text-center">{row.sum.present}</TableCell>
-                              <TableCell className="text-center">{row.sum.leave}</TableCell>
-                              <TableCell className="text-center">{row.sum.absent}</TableCell>
-                              <TableCell className="text-center">{row.sum.paidLeaveDays}</TableCell>
-                              <TableCell className="text-center">{row.sum.unpaidLeaveDays}</TableCell>
-                              <TableCell className="text-right font-semibold">{row.sum.paidDays}</TableCell>
-                              <TableCell className="text-right font-semibold">{formatCurrency(row.grossLkr)}</TableCell>
-                              <TableCell className="text-right text-muted-foreground">{formatCurrency(row.deductionLkr)}</TableCell>
-                              <TableCell className="text-right font-semibold">{formatCurrency(row.netLkr)}</TableCell>
-                              <TableCell className="text-right">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="gap-1 pdf-hide"
-                                  onClick={() => downloadSlip(row)}
-                                >
-                                  <FileDown className="h-3.5 w-3.5" />
-                                  PDF
-                                </Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                    <p className="text-xs text-muted-foreground">Month filter: {payrollMonth}. Only records with dates in this month are counted.</p>
-                  </CardContent>
-                </Card>
-              </TabsContent>
             </Tabs>
           </ReportPdfShell>
         </div>
