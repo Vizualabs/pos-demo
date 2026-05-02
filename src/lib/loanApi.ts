@@ -6,6 +6,7 @@ export type Loan = {
   loanAmount: number
   loanDate: string
   paidAmount: number
+  type: string
   balance?: number
   createdAt?: string
   updatedAt?: string
@@ -23,6 +24,7 @@ function normalizeLoan(d: any): Loan {
     loanAmount,
     loanDate: d?.loanDate ?? d?.loan_date ?? String(d?.loanDate ?? ""),
     paidAmount,
+    type: d?.type ?? "LOAN",
     balance,
     createdAt: d?.createdAt ?? d?.created_at,
     updatedAt: d?.updatedAt ?? d?.updated_at,
@@ -49,7 +51,7 @@ export async function getLoanById(id: number): Promise<Loan> {
   return normalizeLoan(data)
 }
 
-export async function updateLoan(id: number, payload: { empId: number; loanDate: string; loanAmount: number; paidAmount: number }): Promise<Loan> {
+export async function updateLoan(id: number, payload: { empId: number; loanDate: string; loanAmount: number; paidAmount: number; type: string }): Promise<Loan> {
   const resp = await api.put(`/loans/${id}`, payload)
   const data = resp?.data ?? {}
   return normalizeLoan(data)
@@ -71,12 +73,13 @@ export async function addLoanPayment(id: number, receivedAmount: number): Promis
   return normalizeLoan(data)
 }
 
-export async function createLoan(payload: { empId: number; loanDate: string; loanAmount: number; paidAmount?: number }): Promise<Loan> {
+export async function createLoan(payload: { empId: number; loanDate: string; loanAmount: number; paidAmount?: number; type: string }): Promise<Loan> {
   const body = {
     empId: payload.empId,
     loanDate: payload.loanDate,
     loanAmount: payload.loanAmount,
     paidAmount: payload.paidAmount ?? 0,
+    type: payload.type,
   }
   const resp = await api.post('/loans', body)
   const data = resp?.data ?? {}
