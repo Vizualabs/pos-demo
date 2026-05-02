@@ -58,8 +58,8 @@ const Staff = () => {
   const [loans, setLoans] = useState<any[]>([])
   const [loansLoading, setLoansLoading] = useState(false)
   const [editingLoanId, setEditingLoanId] = useState<number | null>(null)
-  const [loanEditForm, setLoanEditForm] = useState<{ loanAmount: string; loanDate: string; paidAmount: string }>({ loanAmount: '', loanDate: '', paidAmount: '' })
-  const [loanNewForm, setLoanNewForm] = useState<{ loanAmount: string; loanDate: string }>({ loanAmount: '', loanDate: '' })
+  const [loanEditForm, setLoanEditForm] = useState<{ loanAmount: string; loanDate: string; paidAmount: string; type: string }>({ loanAmount: '', loanDate: '', paidAmount: '', type: '' })
+  const [loanNewForm, setLoanNewForm] = useState<{ loanAmount: string; loanDate: string; type: string }>({ loanAmount: '', loanDate: '', type: 'LOAN' })
   const [payrolls, setPayrolls] = useState<PayrollResponseDto[]>([]);
   const [payrollsLoading, setPayrollsLoading] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
@@ -168,7 +168,7 @@ const Staff = () => {
       return
     }
     try {
-      await createLoan({ empId: loanOpenFor.empId, loanDate, loanAmount, paidAmount })
+      await createLoan({ empId: loanOpenFor.empId, loanDate, loanAmount, paidAmount, type: loanNewForm.type })
       toast.success('Loan created')
       const list = await getLoansByEmployee(loanOpenFor.empId)
       setLoans(list)
@@ -181,7 +181,7 @@ const Staff = () => {
 
   const startEditLoan = (l: any) => {
     setEditingLoanId(l.loanId)
-    setLoanEditForm({ loanAmount: String(l.loanAmount), loanDate: l.loanDate ?? '', paidAmount: String(l.paidAmount ?? 0) })
+    setLoanEditForm({ loanAmount: String(l.loanAmount), loanDate: l.loanDate ?? '', paidAmount: String(l.paidAmount ?? 0), type: l.type ?? 'LOAN' })
   }
 
   const saveEditedLoan = async (loanId: number) => {
@@ -190,6 +190,7 @@ const Staff = () => {
       loanDate: loanEditForm.loanDate,
       loanAmount: Number(loanEditForm.loanAmount),
       paidAmount: Number(loanEditForm.paidAmount),
+      type: loanEditForm.type,
     }
     try {
       await updateLoan(loanId, payload)
@@ -662,13 +663,25 @@ const Staff = () => {
                       <Input type="date" value={loanNewForm.loanDate} onChange={(e) => setLoanNewForm((s) => ({ ...s, loanDate: e.target.value }))} />
                     </div>
                     <div className="grid gap-1">
+                      <Label>Loan type</Label>
+                      <Select value={loanNewForm.type} onValueChange={(value) => setLoanNewForm({ ...loanNewForm, type: value })}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="LOAN">Loan</SelectItem>
+                          <SelectItem value="ADVANCE">Advance</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid gap-1">
                       <Label>Loan amount</Label>
                       <Input type="number" value={loanNewForm.loanAmount} onChange={(e) => setLoanNewForm((s) => ({ ...s, loanAmount: e.target.value }))} />
                     </div>
                     {/* Paid amount removed from add form; default to 0 on create */}
                   </div>
                   <div className="flex gap-2 justify-end mt-4">
-                    <Button variant="outline" onClick={() => setLoanNewForm({ loanAmount: '', loanDate: '', paidAmount: '' })}>Clear</Button>
+                    <Button variant="outline" onClick={() => setLoanNewForm({ loanAmount: '', loanDate: '', type: 'LOAN' })}>Clear</Button>
                     <Button onClick={() => void handleCreateLoan()}>Add loan</Button>
                   </div>
                 </CardContent>
@@ -684,16 +697,26 @@ const Staff = () => {
                       <thead>
                         <tr className="text-left">
                           <th className="px-4 py-2">Loan date</th>
+                          <th className="px-4 py-2">Type</th>
                           <th className="px-4 py-2">Amount</th>
                           <th className="px-4 py-2">Paid</th>
-                          <th className="px-4 py-2">Balance</th>
-                          <th className="px-4 py-2">Actions</th>
+  <th className="px-4 py-2">Balance</th>
+  <th className="px-4 py-2">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {loans.map((l) => (
                           <tr key={l.loanId} className="border-b">
                             <td className="px-4 py-3">{l.loanDate}</td>
+                            <td className="px-4 py-3">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                l.type === 'LOAN'
+                                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200'
+                                  : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200'
+                              }`}>
+                                {l.type}
+                              </span>
+                            </td>
                             <td className="px-4 py-3">{formatCurrency(l.loanAmount ?? 0)}</td>
                             <td className="px-4 py-3">{formatCurrency(l.paidAmount ?? 0)}</td>
                             <td className="px-4 py-3">{formatCurrency(l.balance ?? 0)}</td>
@@ -828,7 +851,16 @@ const Staff = () => {
                                   <div key={l.loanId} className="flex items-center gap-4 bg-background p-3 rounded border">
                                     <div className="flex-1">
                                       <p className="font-medium text-sm">Loan #{l.loanId} - {l.loanDate}</p>
-                                      <p className="text-xs text-muted-foreground">Balance: {formatCurrency(l.balance ?? 0)}</p>
+                                      <div className="flex items-center gap-2">
+                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                          l.type === 'LOAN'
+                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-200'
+                                            : 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-200'
+                                        }`}>
+                                          {l.type}
+                                        </span>
+                                        <p className="text-xs text-muted-foreground">Balance: {formatCurrency(l.balance ?? 0)}</p>
+                                      </div>
                                     </div>
                                     <div className="w-32">
                                       <Label className="text-xs">Deduct Amount</Label>
