@@ -343,10 +343,11 @@ const MenuItems = () => {
     const imageUrl: string | null =
       (existingProduct?.imageUrl ?? null) === "/placeholder.svg" ? null : (existingProduct?.imageUrl ?? null)
 
-    const costPrice =
-      !isShowcase && recipe.length > 0 && calculatedIngredientCost != null
+    const costPrice = !isShowcase
+      ? recipe.length > 0 && calculatedIngredientCost != null
         ? calculatedIngredientCost
-        : Math.round(basePrice * 0.45)
+        : 0
+      : Math.round(basePrice * 0.45)
 
     try {
       const payload = {

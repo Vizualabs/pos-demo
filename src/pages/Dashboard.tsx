@@ -22,6 +22,21 @@ function inDay(iso: string, day: Date) {
   const dt = new Date(iso)
   return dt >= startOfDay(day) && dt <= endOfDay(day)
 }
+function startOfWeek(d: Date) {
+  const copy = new Date(d)
+  const day = copy.getDay() // 0=Sun,1=Mon,...
+  const diff = (day + 6) % 7 // monday-based
+  copy.setDate(copy.getDate() - diff)
+  copy.setHours(0, 0, 0, 0)
+  return copy
+}
+function startOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0)
+}
+function inRange(iso: string, from: Date, to: Date) {
+  const dt = new Date(iso)
+  return dt >= from && dt <= to
+}
 function pctChange(today: number, yesterday: number) {
   if (!Number.isFinite(today) || !Number.isFinite(yesterday)) return null
   if (yesterday === 0) return null
@@ -67,8 +82,7 @@ const Dashboard = () => {
     if (location.pathname !== "/dashboard") return
 
     let cancelled = false
-
-    ;(async () => {
+    const fetchDashboardData = async () => {
       setLoading(true)
       try {
         const [o, oi, p, inv] = await Promise.allSettled([
@@ -87,10 +101,22 @@ const Dashboard = () => {
       } finally {
         if (!cancelled) setLoading(false)
       }
-    })()
+    }
+
+    void fetchDashboardData()
+    const intervalId = window.setInterval(() => {
+      void fetchDashboardData()
+    }, 15000)
+
+    const onFocus = () => {
+      void fetchDashboardData()
+    }
+    window.addEventListener("focus", onFocus)
 
     return () => {
       cancelled = true
+      window.clearInterval(intervalId)
+      window.removeEventListener("focus", onFocus)
     }
   }, [location.pathname])
 
@@ -113,6 +139,14 @@ const Dashboard = () => {
     () => orders.filter((o) => inDay(o.orderDate ?? o.createdAt, yesterday)),
     [orders, yesterday],
   )
+  const weeklyOrders = useMemo(() => {
+    const from = startOfWeek(today)
+    return orders.filter((o) => inRange(o.orderDate ?? o.createdAt, from, endOfDay(today)))
+  }, [orders, today])
+  const monthlyOrders = useMemo(() => {
+    const from = startOfMonth(today)
+    return orders.filter((o) => inRange(o.orderDate ?? o.createdAt, from, endOfDay(today)))
+  }, [orders, today])
 
   const todaysRevenue = useMemo(() => {
     // Prefer PAID orders; fall back to all if backend doesn’t use PAID consistently
@@ -126,6 +160,16 @@ const Dashboard = () => {
     const list = paid.length > 0 ? paid : yesterdaysOrders
     return list.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0)
   }, [yesterdaysOrders])
+  const weeklyRevenue = useMemo(() => {
+    const paid = weeklyOrders.filter((o) => String(o.status).toUpperCase() === "PAID")
+    const list = paid.length > 0 ? paid : weeklyOrders
+    return list.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0)
+  }, [weeklyOrders])
+  const monthlyRevenue = useMemo(() => {
+    const paid = monthlyOrders.filter((o) => String(o.status).toUpperCase() === "PAID")
+    const list = paid.length > 0 ? paid : monthlyOrders
+    return list.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0)
+  }, [monthlyOrders])
 
   const todaysOrderCount = todaysOrders.length
   const yesterdaysOrderCount = yesterdaysOrders.length
@@ -267,7 +311,7 @@ const Dashboard = () => {
               color="success"
             />
             <StatCard
-              title="Total Orders (Today)"
+              title="Today Orders"
               value={String(todaysOrderCount)}
               change={fmtChangeLabel(ordersChange)}
               trend={ordersChange != null && ordersChange < 0 ? "down" : "up"}
@@ -275,21 +319,51 @@ const Dashboard = () => {
               color="primary"
             />
             <StatCard
-              title="Active Tables"
-              value={String(activeTables)}
-              change="Dine-in (pending)"
-              trend="up"
-              icon={Users}
-              color="accent"
-            />
-            <StatCard
-              title="Avg. Order Value"
-              value={formatCurrency(avgOrderValue)}
-              change="Based on today"
+              title="Weekly Revenue"
+              value={formatCurrencyCompact(weeklyRevenue)}
+              change={`${weeklyOrders.length} orders`}
               trend="up"
               icon={TrendingUp}
               color="warning"
             />
+            <StatCard
+              title="Monthly Revenue"
+              value={formatCurrencyCompact(monthlyRevenue)}
+              change={`${monthlyOrders.length} orders`}
+              trend="up"
+              icon={Users}
+              color="accent"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            <Card className="modern-card border-0">
+              <CardContent className="p-5">
+                <p className="text-sm text-muted-foreground">Today snapshot</p>
+                <p className="text-xl font-bold mt-1">
+                  {todaysOrderCount} orders · {formatCurrency(todaysRevenue)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Avg {formatCurrency(avgOrderValue)} per order</p>
+              </CardContent>
+            </Card>
+            <Card className="modern-card border-0">
+              <CardContent className="p-5">
+                <p className="text-sm text-muted-foreground">This week</p>
+                <p className="text-xl font-bold mt-1">
+                  {weeklyOrders.length} orders · {formatCurrency(weeklyRevenue)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">From Monday to now</p>
+              </CardContent>
+            </Card>
+            <Card className="modern-card border-0">
+              <CardContent className="p-5">
+                <p className="text-sm text-muted-foreground">This month</p>
+                <p className="text-xl font-bold mt-1">
+                  {monthlyOrders.length} orders · {formatCurrency(monthlyRevenue)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Live month-to-date totals</p>
+              </CardContent>
+            </Card>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">

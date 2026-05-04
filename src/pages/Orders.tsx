@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import { cn, formatCurrency } from "@/lib/utils"
 import { ORDER_DELETE_AUTH } from "@/config/orderDeleteCredentials"
 import { getAllProducts, type ProductResponseDto } from "@/lib/productsApi"
+import { applyInventoryUsageDeductions } from "@/lib/inventoryApi"
 import {
   getAllOrders,
   patchOrder,
@@ -38,7 +39,7 @@ import {
   type PortionType,
 } from "@/lib/orderItemsApi"
 import { SinhalaReceiptDialog } from "@/components/POS/SinhalaReceiptDialog"
-import { type OrderBillsPayload } from "@/components/POS/receiptPrint"
+import { printKitchenTicketsForStationsSequentially, type KitchenTicketPayload, type OrderBillsPayload } from "@/components/POS/receiptPrint"
 
 const statusLabels: Record<OrderStatus, string> = {
   NEW: "Pending",
@@ -86,10 +87,20 @@ const orderTypeLabels: Record<OrderType, string> = {
   TAKE_AWAY: "Take away",
   DELIVERY: "Delivery",
 }
+const orderTypeLabelSi: Record<OrderType, string> = {
+  DINE_IN: "ආපන ශාලාව",
+  TAKE_AWAY: "නිවසට ගෙන යාම",
+  DELIVERY: "ඩිලිවරි",
+}
 
 function portionLabelForBill(p: PortionType | null | undefined): string | undefined {
   if (p === "MEDIUM") return "Medium"
   if (p === "LARGE") return "Large"
+  return undefined
+}
+function portionLabelSi(p: PortionType | null | undefined): string | undefined {
+  if (p === "MEDIUM") return "මධ්‍යම"
+  if (p === "LARGE") return "විශාල"
   return undefined
 }
 
@@ -117,6 +128,61 @@ function buildOrderBillPayload(order: UiOrder, paymentLabel = ""): OrderBillsPay
     },
     kitchenTickets: [],
   }
+}
+
+function buildKitchenTicketsForNewDraftLines(
+  order: UiOrder,
+  draftLines: DraftLine[],
+  products: ProductResponseDto[],
+  tableNumber: number | null,
+): KitchenTicketPayload[] {
+  const productById = new Map<number, ProductResponseDto>()
+  for (const p of products) productById.set(p.productId, p)
+  const byKitchen = new Map<"KITCHEN_1" | "KITCHEN_2", KitchenTicketPayload["lines"]>()
+  for (const line of draftLines) {
+    if (line.kind !== "new" || line.productId === "") continue
+    const p = productById.get(line.productId)
+    if (!p || p.skipKitchenTicket) continue
+    const kitchen = p.kitchen === "KITCHEN_2" ? "KITCHEN_2" : "KITCHEN_1"
+    const list = byKitchen.get(kitchen) ?? []
+    list.push({
+      nameEn: p.name || line.name,
+      nameSi: p.nameSinhala ?? null,
+      qty: line.quantity,
+      portionSi: portionLabelSi(line.portionType),
+      lineNote: null,
+    })
+    byKitchen.set(kitchen, list)
+  }
+  const tableLabel = order.orderType === "DINE_IN" ? String(tableNumber ?? order.tableNumber ?? "—") : "—"
+  return (["KITCHEN_1", "KITCHEN_2"] as const)
+    .filter((k) => (byKitchen.get(k)?.length ?? 0) > 0)
+    .map((k) => ({
+      kitchen: k,
+      kitchenBadgeSi: k === "KITCHEN_1" ? "කුස්සිය 1" : "කුස්සිය 2",
+      orderId: order.orderId,
+      tableLabel,
+      orderTypeLabelSi: orderTypeLabelSi[order.orderType],
+      kitchenNote: null,
+      lines: byKitchen.get(k)!,
+    }))
+}
+
+function buildInventoryDeductionLines(
+  items: UiOrderItem[],
+  productById: Map<number, ProductResponseDto>,
+): Array<{ itemId: number; quantity: number }> {
+  const usage = new Map<number, number>()
+  for (const line of items) {
+    const product = productById.get(line.productId)
+    if (!product || !Array.isArray(product.recipe) || product.recipe.length === 0) continue
+    for (const recipeLine of product.recipe) {
+      const qty = Number(recipeLine.quantity) * Number(line.quantity)
+      if (!Number.isFinite(qty) || qty <= 0) continue
+      usage.set(recipeLine.itemId, (usage.get(recipeLine.itemId) ?? 0) + qty)
+    }
+  }
+  return Array.from(usage, ([itemId, quantity]) => ({ itemId, quantity: Number(quantity.toFixed(3)) }))
 }
 
 function formatTime(iso: string) {
@@ -147,6 +213,7 @@ function normalizePaymentMethod(value: unknown): PaymentMethod {
 
 export default function Orders() {
   const [orders, setOrders] = useState<UiOrder[]>([])
+  const [products, setProducts] = useState<ProductResponseDto[]>([])
   const [search, setSearch] = useState("")
   const [editingOrder, setEditingOrder] = useState<UiOrder | null>(null)
   const [deleteOrderId, setDeleteOrderId] = useState<number | null>(null)
@@ -163,7 +230,7 @@ export default function Orders() {
     setIsLoading(true)
     try {
       const [ordersRes, productsRes] = await Promise.all([getAllOrders(), getAllProducts()])
-      const orderItemsRes: OrderItemResponseDto[] = []
+      const orderItemsRes: OrderItemResponseDto[] = await getAllOrderItems()
 
       const productNameById = new Map<number, string>()
       for (const p of productsRes) productNameById.set(p.productId, p.name)
@@ -200,8 +267,10 @@ export default function Orders() {
         })
 
       setOrders(combined)
+      setProducts(productsRes)
     } catch (e) {
       console.error(e)
+      toast.error("Failed to load orders")
     } finally {
       setIsLoading(false)
     }
@@ -229,6 +298,11 @@ export default function Orders() {
   const newOrders = byStatus("NEW")
   const paidOrders = byStatus("PAID")
   const cancelledOrders = byStatus("CANCELLED")
+  const productById = useMemo(() => {
+    const map = new Map<number, ProductResponseDto>()
+    for (const p of products) map.set(p.productId, p)
+    return map
+  }, [products])
 
   const handleStatusChange = async (order: UiOrder, status: OrderStatus) => {
     try {
@@ -238,6 +312,17 @@ export default function Orders() {
         prev.map((o) => (o.orderId === updated.orderId ? mergeOrderResponseIntoUi(o, updated) : o)),
       )
       if (status === "PAID") {
+        if (order.status !== "PAID") {
+          const usageLines = buildInventoryDeductionLines(merged.items, productById)
+          if (usageLines.length > 0) {
+            try {
+              await applyInventoryUsageDeductions(usageLines)
+            } catch (inventoryError) {
+              console.error(inventoryError)
+              toast.warning("Order paid, but inventory deduction failed. Please check inventory.")
+            }
+          }
+        }
         if (merged.orderType === "DINE_IN") {
           setDineInBillPrintedIds((prev) => {
             const next = new Set(prev)
@@ -828,6 +913,14 @@ function EditOrderDialog({
         taxAmount: 0,
         discountAmount: order.discountAmount ?? 0,
       })
+
+      if (status !== "PAID" && status !== "CANCELLED") {
+        const newLineTickets = buildKitchenTicketsForNewDraftLines(order, draftLines, products, parsedTable)
+        if (newLineTickets.length > 0) {
+          printKitchenTicketsForStationsSequentially(newLineTickets, new Date())
+          toast.success("New items sent to kitchen printers.")
+        }
+      }
 
       if (status === "PAID" && !isDineIn) {
         const billLines = draftLines.map((l) => ({
