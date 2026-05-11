@@ -63,6 +63,16 @@ export type ProductRequestDto = {
 
 export type ProductPatchDto = Partial<ProductRequestDto>
 
+function toBackendRecipeLines(lines: ProductRecipeLineRequestDto[]): Record<string, unknown>[] {
+  return (lines ?? []).map((l) => ({
+    // Different backends use different names for the inventory reference.
+    itemId: l.itemId,
+    inventoryItemId: l.itemId,
+    quantity: l.quantity,
+    qty: l.quantity,
+  }))
+}
+
 function normalizeImageUrl(raw: unknown): string | null {
   if (typeof raw !== "string") return null
   const s = raw.trim()
@@ -89,10 +99,29 @@ function normalizeRecipe(raw: unknown): ProductRecipeLineResponseDto[] {
   return raw
     .map((x) => {
       const r = x as Record<string, unknown>
+
+      const itemIdRaw =
+        r.itemId ??
+        r.inventoryItemId ??
+        r["inventory_item_id"] ??
+        r.inventoryId ??
+        r["inventory_id"] ??
+        // Some APIs include a per-row id; keep this as last fallback.
+        r.id
+
+      const quantityRaw =
+        r.quantity ??
+        r["qty"] ??
+        r["amount"] ??
+        r["qtyKg"] ??
+        r["quantityKg"] ??
+        r["quantity_kg"] ??
+        0
+
       return {
-        itemId: Number(r.itemId ?? r.id),
+        itemId: Number(itemIdRaw),
         itemName: r.itemName != null ? String(r.itemName) : undefined,
-        quantity: Number(r.quantity ?? 0),
+        quantity: Number(quantityRaw),
       } satisfies ProductRecipeLineResponseDto
     })
     .filter((r) => Number.isFinite(r.itemId) && r.itemId >= 1 && Number.isFinite(r.quantity))
@@ -160,7 +189,9 @@ function toBackendProductRequest(payload: ProductRequestDto): Record<string, unk
     isAvailable: payload.isAvailable,
     hasPortionPricing: payload.hasPortionPricing,
     portionPrices: payload.portionPrices,
-    recipe: payload.recipe,
+    recipe: toBackendRecipeLines(payload.recipe),
+    // Common alias for recipe arrays.
+    recipeLines: toBackendRecipeLines(payload.recipe),
   }
   if (payload.productId != null) base.productId = payload.productId
   return base
@@ -177,7 +208,10 @@ function toBackendProductPatch(patch: ProductPatchDto): Record<string, unknown> 
   if (patch.isAvailable != null) out.isAvailable = patch.isAvailable
   if (patch.hasPortionPricing != null) out.hasPortionPricing = patch.hasPortionPricing
   if (patch.portionPrices != null) out.portionPrices = patch.portionPrices
-  if (patch.recipe != null) out.recipe = patch.recipe
+  if (patch.recipe != null) {
+    out.recipe = toBackendRecipeLines(patch.recipe)
+    out.recipeLines = toBackendRecipeLines(patch.recipe)
+  }
   if (patch.productId != null) out.productId = patch.productId
   return out
 }
