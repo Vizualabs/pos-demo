@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/apiClient"
+import axiosClient from "@/axios"
 import { nowIso } from "@/lib/demoPersistence"
 
 export type CustomerRequestDto = {
@@ -34,39 +34,30 @@ function normalizeCustomer(raw: unknown): CustomerResponseDto {
 }
 
 export async function createCustomer(body: CustomerRequestDto): Promise<CustomerResponseDto> {
-  const raw = await apiFetch<unknown>("/api/customers", {
-    method: "POST",
-    body,
-  })
-  return normalizeCustomer(raw)
+  const res = await axiosClient.post<unknown>("/customers", body)
+  return normalizeCustomer(res.data)
 }
 
 export async function getAllCustomers(): Promise<CustomerResponseDto[]> {
-  const raw = await apiFetch<unknown[]>("/api/customers", { method: "GET" })
-  return Array.isArray(raw) ? raw.map(normalizeCustomer) : []
+  const res = await axiosClient.get<unknown[]>("/customers")
+  return Array.isArray(res.data) ? res.data.map(normalizeCustomer) : []
 }
 
 export async function getCustomerById(customerId: number): Promise<CustomerResponseDto> {
-  const raw = await apiFetch<unknown>(`/api/customers/${customerId}`, { method: "GET" })
-  return normalizeCustomer(raw)
+  const res = await axiosClient.get<unknown>(`/customers/${customerId}`)
+  return normalizeCustomer(res.data)
 }
 
 export async function updateCustomer(customerId: number, body: CustomerRequestDto): Promise<CustomerResponseDto> {
-  const raw = await apiFetch<unknown>(`/api/customers/${customerId}`, {
-    method: "PUT",
-    body,
-  })
-  return normalizeCustomer(raw)
+  const res = await axiosClient.put<unknown>(`/customers/${customerId}`, body)
+  return normalizeCustomer(res.data)
 }
 
 export async function patchCustomer(customerId: number, patch: CustomerPatchDto): Promise<CustomerResponseDto> {
-  const raw = await apiFetch<unknown>(`/api/customers/${customerId}`, {
-    method: "PATCH",
-    body: patch,
-  })
-  return normalizeCustomer(raw)
+  const res = await axiosClient.patch<unknown>(`/customers/${customerId}`, patch)
+  return normalizeCustomer(res.data)
 }
 
 export async function deleteCustomer(customerId: number): Promise<void> {
-  await apiFetch<void>(`/api/customers/${customerId}`, { method: "DELETE" })
+  await axiosClient.delete(`/customers/${customerId}`)
 }

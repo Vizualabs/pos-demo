@@ -19,6 +19,7 @@ import { ClipboardList, Search, Pencil, Trash2, Clock, CheckCircle, XCircle, Plu
 import { toast } from "sonner"
 import { cn, formatCurrency } from "@/lib/utils"
 import { ORDER_DELETE_AUTH } from "@/config/orderDeleteCredentials"
+import { loadJson, saveJson } from "@/lib/demoPersistence"
 import { getAllProducts, type ProductResponseDto } from "@/lib/productsApi"
 import {
   getAllOrders,
@@ -67,6 +68,19 @@ const statusIcons = {
   CANCELLED: XCircle,
   UPDATED: Clock,
 } as const
+
+const DINE_IN_BILL_PRINTED_STORAGE_KEY = "pos_dine_in_bill_printed_v1"
+
+function loadPrintedDineInBillIds(): Set<number> {
+  const raw = loadJson<unknown>(DINE_IN_BILL_PRINTED_STORAGE_KEY, [])
+  if (!Array.isArray(raw)) return new Set()
+  const ids = raw.map((x) => Number(x)).filter((n) => Number.isFinite(n) && n >= 1)
+  return new Set(ids)
+}
+
+function persistPrintedDineInBillIds(ids: ReadonlySet<number>) {
+  saveJson(DINE_IN_BILL_PRINTED_STORAGE_KEY, Array.from(ids))
+}
 
 type UiOrderItem = OrderItemResponseDto & { name: string }
 
@@ -157,13 +171,19 @@ export default function Orders() {
   const [paidBillOpen, setPaidBillOpen] = useState(false)
   const [paidBillPayload, setPaidBillPayload] = useState<OrderBillsPayload | null>(null)
   /** Dine-in: Mark as Paid allowed only after modal “Print customer bill” for this order. */
-  const [dineInBillPrintedIds, setDineInBillPrintedIds] = useState<Set<number>>(() => new Set())
+  const [dineInBillPrintedIds, setDineInBillPrintedIds] = useState<Set<number>>(() => loadPrintedDineInBillIds())
 
   const refresh = async () => {
     setIsLoading(true)
     try {
-      const [ordersRes, productsRes] = await Promise.all([getAllOrders(), getAllProducts()])
-      const orderItemsRes: OrderItemResponseDto[] = []
+      const [ordersRes, productsRes, orderItemsRes] = await Promise.all([
+        getAllOrders(),
+        getAllProducts(),
+        getAllOrderItems().catch((e) => {
+          console.warn("Failed to load order items; falling back to empty list", e)
+          return [] as OrderItemResponseDto[]
+        }),
+      ])
 
       const productNameById = new Map<number, string>()
       for (const p of productsRes) productNameById.set(p.productId, p.name)
@@ -200,6 +220,25 @@ export default function Orders() {
         })
 
       setOrders(combined)
+
+      // Cleanup: if an order is no longer pending dine-in, it doesn't need the gating state.
+      setDineInBillPrintedIds((prev) => {
+        const next = new Set(prev)
+        const activePendingDineIn = new Set(
+          combined
+            .filter((o) => o.orderType === "DINE_IN" && o.status === "NEW")
+            .map((o) => o.orderId),
+        )
+        let changed = false
+        for (const id of Array.from(next)) {
+          if (!activePendingDineIn.has(id)) {
+            next.delete(id)
+            changed = true
+          }
+        }
+        if (changed) persistPrintedDineInBillIds(next)
+        return changed ? next : prev
+      })
     } catch (e) {
       console.error(e)
     } finally {
@@ -242,6 +281,7 @@ export default function Orders() {
           setDineInBillPrintedIds((prev) => {
             const next = new Set(prev)
             next.delete(merged.orderId)
+            persistPrintedDineInBillIds(next)
             return next
           })
           toast.success("Marked as paid.")
@@ -249,6 +289,14 @@ export default function Orders() {
           setPaidBillPayload(buildOrderBillPayload(merged))
           setPaidBillOpen(true)
         }
+      } else if (status === "CANCELLED") {
+        setDineInBillPrintedIds((prev) => {
+          if (!prev.has(merged.orderId)) return prev
+          const next = new Set(prev)
+          next.delete(merged.orderId)
+          persistPrintedDineInBillIds(next)
+          return next
+        })
       }
     } catch (e) {
       console.error(e)
@@ -270,6 +318,7 @@ export default function Orders() {
       setDineInBillPrintedIds((prev) => {
         const next = new Set(prev)
         next.delete(orderId)
+        persistPrintedDineInBillIds(next)
         return next
       })
       setOrders((prev) => prev.filter((o) => o.orderId !== orderId))
@@ -413,7 +462,12 @@ export default function Orders() {
           }}
           payload={paidBillPayload}
           onPendingDineInBillPrinted={(orderId) => {
-            setDineInBillPrintedIds((prev) => new Set(prev).add(orderId))
+            setDineInBillPrintedIds((prev) => {
+              const next = new Set(prev)
+              next.add(orderId)
+              persistPrintedDineInBillIds(next)
+              return next
+            })
           }}
         />
 

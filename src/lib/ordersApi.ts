@@ -1,6 +1,24 @@
 import axiosClient from "@/axios"
 import { nowIso } from "@/lib/demoPersistence"
 
+export const ORDERS_CHANGED_EVENT = "pos-orders-changed"
+export const ORDERS_CHANGED_STORAGE_KEY = "pos_orders_changed_v1"
+
+function emitOrdersChanged() {
+  if (typeof window === "undefined") return
+  try {
+    window.dispatchEvent(new Event(ORDERS_CHANGED_EVENT))
+  } catch {
+    // ignore
+  }
+  try {
+    // Also helps other tabs via the StorageEvent.
+    window.localStorage.setItem(ORDERS_CHANGED_STORAGE_KEY, String(Date.now()))
+  } catch {
+    // ignore
+  }
+}
+
 export type PaymentMethod = "CASH" | "CARD" | "PAYPAL" | "BANK_TRANSFER" | "CASH_ON_DELIVERY"
 
 export type OrderStatus = "NEW" | "PAID" | "CANCELLED" | "UPDATED"
@@ -123,6 +141,7 @@ export async function createOrder(payload: OrderRequestDto): Promise<OrderRespon
   const res = await axiosClient.post<unknown>("/orders", toBackendOrderRequest(payload))
   // Backend response may not echo items; keep the request items in memory for UI convenience.
   const created = normalizeOrder(res.data)
+  emitOrdersChanged()
   return { ...created, items: payload.items }
 }
 
@@ -139,6 +158,7 @@ export async function getOrderById(orderId: number): Promise<OrderResponseDto> {
 export async function updateOrder(orderId: number, payload: OrderRequestDto): Promise<OrderResponseDto> {
   const res = await axiosClient.put<unknown>(`/orders/${orderId}`, toBackendOrderRequest(payload))
   const updated = normalizeOrder(res.data)
+  emitOrdersChanged()
   return { ...updated, items: payload.items }
 }
 
@@ -153,6 +173,7 @@ export async function patchOrder(orderId: number, patch: OrderPatchDto): Promise
 
   const res = await axiosClient.patch<unknown>(`/orders/${orderId}`, body)
   const updated = normalizeOrder(res.data)
+  emitOrdersChanged()
   // If backend doesn't return items, preserve caller-provided patch items.
   if (patch.items !== undefined) return { ...updated, items: patch.items }
   return updated
@@ -183,4 +204,5 @@ function toBackendOrderItems(items: OrderItemRequestDto[]): Record<string, unkno
 
 export async function deleteOrder(orderId: number): Promise<void> {
   await axiosClient.delete(`/orders/${orderId}`)
+  emitOrdersChanged()
 }

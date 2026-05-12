@@ -27,6 +27,12 @@ import { apiFetchBlob } from "@/lib/apiClient"
 
 type RecipeLineForm = { itemId: number | ""; quantity: string }
 
+function parseQuantityKg(input: string): number {
+  // Accept both "0.25" and "0,25".
+  const normalized = String(input).trim().replace(",", ".")
+  return Number.parseFloat(normalized)
+}
+
 const MenuItems = () => {
   const [items, setItems] = useState<ProductResponseDto[]>([])
   const [categories, setCategories] = useState<CategoryResponseDto[]>([])
@@ -159,7 +165,7 @@ const MenuItems = () => {
       // normalize ids to numbers + dedupe by categoryId
       const unique = new Map<number, CategoryResponseDto>()
       for (const c of active) {
-        const id = Number((c as any).categoryId)
+        const id = Number(c.categoryId)
         if (Number.isFinite(id)) unique.set(id, { ...c, categoryId: id })
       }
 
@@ -183,7 +189,7 @@ const MenuItems = () => {
 
         const unique = new Map<number, CategoryResponseDto>()
         for (const c of active) {
-          const id = Number((c as any).categoryId)
+          const id = Number(c.categoryId)
           if (Number.isFinite(id)) unique.set(id, { ...c, categoryId: id })
         }
 
@@ -266,7 +272,7 @@ const MenuItems = () => {
     return recipeLines
       .map((l) => ({
         itemId: l.itemId === "" ? NaN : l.itemId,
-        quantity: Number.parseFloat(l.quantity),
+        quantity: parseQuantityKg(l.quantity),
       }))
       .filter((l) => Number.isFinite(l.itemId) && Number.isFinite(l.quantity) && l.quantity > 0)
   }, [recipeLines])
@@ -326,7 +332,7 @@ const MenuItems = () => {
       : recipeLines
           .map((l) => ({
             itemId: l.itemId === "" ? NaN : l.itemId,
-            quantity: Number.parseFloat(l.quantity),
+            quantity: parseQuantityKg(l.quantity),
           }))
           .filter((l) => Number.isFinite(l.itemId) && Number.isFinite(l.quantity) && l.quantity > 0)
 
@@ -408,19 +414,59 @@ const MenuItems = () => {
         }
 
         saved = await patchProduct(existingProduct.productId, patch)
-        setItems((prev) => prev.map((p) => (p.productId === saved.productId ? saved : p)))
-        toast.success(`Item ${formatItemCode(saved.productId)} updated`)
+
+        // Keep UI consistent even if backend does not echo recipe back.
+        const merged: ProductResponseDto = {
+          ...saved,
+          categoryId: payload.categoryId,
+          kitchen: payload.kitchen,
+          name: payload.name,
+          nameSinhala: payload.nameSinhala ?? null,
+          description: payload.description,
+          costPrice: payload.costPrice,
+          sellingPrice: payload.sellingPrice,
+          imageUrl: payload.imageUrl,
+          isAvailable: payload.isAvailable,
+          hasPortionPricing: payload.hasPortionPricing,
+          portionPrices: payload.portionPrices,
+          recipe: payload.recipe,
+          skipKitchenTicket: payload.skipKitchenTicket,
+        }
+
+        saved = merged
+        setItems((prev) => prev.map((p) => (p.productId === merged.productId ? merged : p)))
+        toast.success(`Item ${formatItemCode(merged.productId)} updated`)
       } else {
         saved = await createProduct({ ...payload, productId: createProductId })
-        setItems((prev) => [...prev, saved])
-        toast.success(`Item saved with ID ${formatItemCode(saved.productId)}`)
+
+        const merged: ProductResponseDto = {
+          ...saved,
+          categoryId: payload.categoryId,
+          kitchen: payload.kitchen,
+          name: payload.name,
+          nameSinhala: payload.nameSinhala ?? null,
+          description: payload.description,
+          costPrice: payload.costPrice,
+          sellingPrice: payload.sellingPrice,
+          imageUrl: payload.imageUrl,
+          isAvailable: payload.isAvailable,
+          hasPortionPricing: payload.hasPortionPricing,
+          portionPrices: payload.portionPrices,
+          recipe: payload.recipe,
+          skipKitchenTicket: payload.skipKitchenTicket,
+        }
+
+        saved = merged
+        setItems((prev) => [...prev, merged])
+        toast.success(`Item saved with ID ${formatItemCode(merged.productId)}`)
       }
 
       // 2) If an image file is selected, upload it (multipart)
       if (imageFile) {
         try {
           const withImage = await uploadProductImage(saved.productId, imageFile)
-          setItems((prev) => prev.map((p) => (p.productId === withImage.productId ? withImage : p)))
+          // Preserve local-only fields (e.g. recipe) if backend image response doesn't include them.
+          setItems((prev) => prev.map((p) => (p.productId === withImage.productId ? { ...p, ...withImage } : p)))
         } catch (e) {
           console.error(e)
           setUploadError("Image upload failed. Product was saved without updating the image.")
