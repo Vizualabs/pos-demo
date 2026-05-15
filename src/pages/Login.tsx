@@ -5,8 +5,32 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AlertCircle, LogIn } from "lucide-react"
+import type { UserRole } from "@/hooks/useAuth"
 
 const LOGIN_API = "http://localhost:8080/api/security/login"
+const USER_DETAILS_API = "http://localhost:8080/api/security/user/details"
+
+const getRoleFromUser = (user: any): UserRole => {
+  const normalizeRole = (role: unknown) =>
+    String(role ?? "")
+      .trim()
+      .toUpperCase()
+      .replace(/^ROLE_/, "")
+
+  const roles = [
+    normalizeRole(user?.role),
+    ...(Array.isArray(user?.authorities)
+      ? user.authorities.map((auth: any) => normalizeRole(typeof auth === "string" ? auth : auth?.authority || auth?.name || auth?.role))
+      : []),
+    ...(Array.isArray(user?.roles)
+      ? user.roles.map((role: any) => normalizeRole(typeof role === "string" ? role : role?.name || role?.authority || role?.role))
+      : []),
+  ].filter(Boolean)
+
+  if (roles.includes("ADMIN")) return "ADMIN"
+  if (roles.includes("USER")) return "USER"
+  return "GUEST"
+}
 
 const Login = () => {
   const navigate = useNavigate()
@@ -42,8 +66,30 @@ const Login = () => {
       }
 
       const data = await response.json().catch(() => ({}))
-      if (data.token) localStorage.setItem("token", data.token)
-      if (data.user) localStorage.setItem("user", JSON.stringify(data.user))
+      if (data.token) {
+        localStorage.setItem("token", data.token)
+        localStorage.setItem("auth_token", data.token)
+      }
+
+      const detailsResponse = await fetch(USER_DETAILS_API, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      })
+
+      const user = detailsResponse.ok ? await detailsResponse.json().catch(() => data.user || data) : data.user || data
+      const role = getRoleFromUser(user)
+
+      if (role === "GUEST") {
+        setError("Login succeeded, but no valid user role was found.")
+        localStorage.removeItem("isLoggedIn")
+        localStorage.removeItem("user")
+        localStorage.removeItem("token")
+        localStorage.removeItem("auth_token")
+        return
+      }
+
+      localStorage.setItem("user", JSON.stringify(user))
       localStorage.setItem("isLoggedIn", "true")
 
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname
