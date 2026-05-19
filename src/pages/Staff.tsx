@@ -172,7 +172,7 @@ const Staff = () => {
       toast.success('Loan created')
       const list = await getLoansByEmployee(loanOpenFor.empId)
       setLoans(list)
-      setLoanNewForm({ loanAmount: '', loanDate: '' })
+      setLoanNewForm({ loanAmount: '', loanDate: '', type: 'LOAN' })
     } catch (err) {
       console.error(err)
       toast.error('Could not create loan')
