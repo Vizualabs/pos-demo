@@ -124,7 +124,7 @@ function normalizeRecipe(raw: unknown): ProductRecipeLineResponseDto[] {
         quantity: Number(quantityRaw),
       } satisfies ProductRecipeLineResponseDto
     })
-    .filter((r) => Number.isFinite(r.itemId) && r.itemId >= 1 && Number.isFinite(r.quantity))
+    .filter((r) => Number.isFinite(r.itemId) && r.itemId >= 1 && Number.isFinite(r.quantity) && r.quantity > 0)
 }
 
 function normalizeProduct(raw: unknown): ProductResponseDto {
@@ -178,20 +178,28 @@ function normalizeProduct(raw: unknown): ProductResponseDto {
   }
 }
 
-function toBackendProductRequest(payload: ProductRequestDto): Record<string, unknown> {
+function toBackendProductRequest(payload: ProductRequestDto, skipPortionPrices = false): Record<string, unknown> {
   const base: Record<string, unknown> = {
     categoryId: payload.categoryId,
+    kitchen: payload.kitchen,
     name: payload.name,
+    nameSinhala: payload.nameSinhala ?? null,
     description: payload.description,
     costPrice: payload.costPrice,
     sellingPrice: payload.sellingPrice,
     imageUrl: payload.imageUrl,
     isAvailable: payload.isAvailable,
-    hasPortionPricing: payload.hasPortionPricing,
-    portionPrices: payload.portionPrices,
     recipe: toBackendRecipeLines(payload.recipe),
     // Common alias for recipe arrays.
     recipeLines: toBackendRecipeLines(payload.recipe),
+    skipKitchenTicket: payload.skipKitchenTicket ?? false,
+  }
+  // Backend PUT always INSERTs portion-price rows instead of UPDATEing existing
+  // ones, causing a unique-constraint violation when prices already exist.
+  // Callers omit these fields when portion pricing has not changed.
+  if (!skipPortionPrices) {
+    base.hasPortionPricing = payload.hasPortionPricing
+    base.portionPrices = payload.portionPrices
   }
   if (payload.productId != null) base.productId = payload.productId
   return base
@@ -200,7 +208,9 @@ function toBackendProductRequest(payload: ProductRequestDto): Record<string, unk
 function toBackendProductPatch(patch: ProductPatchDto): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   if (patch.categoryId != null) out.categoryId = patch.categoryId
+  if (patch.kitchen != null) out.kitchen = patch.kitchen
   if (patch.name != null) out.name = patch.name
+  if (patch.nameSinhala !== undefined) out.nameSinhala = patch.nameSinhala
   if (patch.description != null) out.description = patch.description
   if (patch.costPrice != null) out.costPrice = patch.costPrice
   if (patch.sellingPrice != null) out.sellingPrice = patch.sellingPrice
@@ -212,6 +222,7 @@ function toBackendProductPatch(patch: ProductPatchDto): Record<string, unknown> 
     out.recipe = toBackendRecipeLines(patch.recipe)
     out.recipeLines = toBackendRecipeLines(patch.recipe)
   }
+  if (patch.skipKitchenTicket != null) out.skipKitchenTicket = patch.skipKitchenTicket
   if (patch.productId != null) out.productId = patch.productId
   return out
 }
@@ -238,9 +249,9 @@ export async function createProduct(payload: ProductRequestDto): Promise<Product
   }
 }
 
-export async function updateProduct(productId: number, payload: ProductRequestDto): Promise<ProductResponseDto> {
+export async function updateProduct(productId: number, payload: ProductRequestDto, skipPortionPrices = false): Promise<ProductResponseDto> {
   // Many backends expect the ID both in the URL and the body for PUT.
-  const res = await axiosClient.put<unknown>(`/products/${productId}`, toBackendProductRequest({ ...payload, productId }))
+  const res = await axiosClient.put<unknown>(`/products/${productId}`, toBackendProductRequest({ ...payload, productId }, skipPortionPrices))
   const updated = normalizeProduct(res.data)
   return {
     ...updated,
