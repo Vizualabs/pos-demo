@@ -6,6 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserPlus, DollarSign, Calendar, ClipboardCheck } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency, formatCurrencyCompact } from "@/lib/utils";
@@ -57,6 +66,10 @@ const Staff = () => {
   const [loanOpenFor, setLoanOpenFor] = useState<Employee | null>(null)
   const [loans, setLoans] = useState<any[]>([])
   const [loansLoading, setLoansLoading] = useState(false)
+  const [paymentLoan, setPaymentLoan] = useState<{ loanId: number; type: string; balance: number } | null>(null)
+  const [paymentAmount, setPaymentAmount] = useState("")
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false)
+  const [paymentResult, setPaymentResult] = useState<{ title: string; description: string } | null>(null)
   const [editingLoanId, setEditingLoanId] = useState<number | null>(null)
   const [loanEditForm, setLoanEditForm] = useState<{ loanAmount: string; loanDate: string; paidAmount: string; type: string }>({ loanAmount: '', loanDate: '', paidAmount: '', type: '' })
   const [loanNewForm, setLoanNewForm] = useState<{ loanAmount: string; loanDate: string; type: string }>({ loanAmount: '', loanDate: '', type: 'LOAN' })
@@ -109,6 +122,9 @@ const Staff = () => {
     setLoanOpenFor(null)
     setLoans([])
     setEditingLoanId(null)
+    setPaymentLoan(null)
+    setPaymentAmount("")
+    setPaymentSubmitting(false)
   }
 
   const handleDeleteLoan = async (loanId: number) => {
@@ -134,17 +150,44 @@ const Staff = () => {
     }
   }
 
-  const handleAddPayment = async (loanId: number) => {
-    const input = window.prompt('Payment amount (LKR)')
-    if (!input) return
-    const amt = Number.parseFloat(input)
+  const openPaymentDialog = (loan: any) => {
+    const balance = Number(loan?.balance ?? 0)
+    setPaymentLoan({
+      loanId: Number(loan?.loanId),
+      type: String(loan?.type ?? "LOAN"),
+      balance: Number.isFinite(balance) ? balance : 0,
+    })
+    setPaymentAmount("")
+    setPaymentSubmitting(false)
+  }
+
+  const closePaymentDialog = () => {
+    if (paymentSubmitting) return
+    setPaymentLoan(null)
+    setPaymentAmount("")
+  }
+
+  const handleAddPayment = async () => {
+    if (!paymentLoan) return
+    const amt = Number.parseFloat(paymentAmount)
     if (!Number.isFinite(amt) || amt <= 0) {
       toast.error('Enter a valid payment amount')
       return
     }
+    if (paymentLoan.balance > 0 && amt > paymentLoan.balance) {
+      toast.error('Payment amount cannot exceed the remaining balance')
+      return
+    }
+    setPaymentSubmitting(true)
     try {
-      await addLoanPayment(loanId, amt)
+      await addLoanPayment(paymentLoan.loanId, amt)
       toast.success('Payment added')
+      setPaymentResult({
+        title: "Success",
+        description: "Payment added successfully.",
+      })
+      setPaymentLoan(null)
+      setPaymentAmount("")
       if (loanOpenFor?.empId) {
         const list = await getLoansByEmployee(loanOpenFor.empId)
         setLoans(list)
@@ -152,6 +195,12 @@ const Staff = () => {
     } catch (err) {
       console.error(err)
       toast.error('Could not add payment')
+      setPaymentResult({
+        title: "Failed",
+        description: "Payment could not be added.",
+      })
+    } finally {
+      setPaymentSubmitting(false)
     }
   }
 
@@ -723,7 +772,7 @@ const Staff = () => {
                             <td className="px-4 py-3">
                               <div className="flex gap-2">
                                 <Button size="sm" variant="destructive" onClick={() => void handleDeleteLoan(l.loanId)}>Delete</Button>
-                                <Button size="sm" onClick={() => void handleAddPayment(l.loanId)}>Pay</Button>
+                                <Button size="sm" onClick={() => openPaymentDialog(l)}>Pay</Button>
                               </div>
                             </td>
                           </tr>
@@ -739,6 +788,55 @@ const Staff = () => {
             </div>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={paymentLoan !== null} onOpenChange={(open) => !open && closePaymentDialog()}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add loan payment</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-3 py-2">
+              {paymentLoan ? (
+                <p className="text-sm text-muted-foreground">
+                  {paymentLoan.type} balance: <span className="font-semibold text-foreground">{formatCurrency(paymentLoan.balance)}</span>
+                </p>
+              ) : null}
+              <div className="grid gap-2">
+                <Label htmlFor="loan-payment-amount">Payment amount (LKR)</Label>
+                <Input
+                  id="loan-payment-amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  inputMode="decimal"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  placeholder="e.g. 2500"
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={closePaymentDialog} disabled={paymentSubmitting}>
+                Cancel
+              </Button>
+              <Button onClick={() => void handleAddPayment()} disabled={paymentSubmitting}>
+                {paymentSubmitting ? "Adding..." : "Add payment"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <AlertDialog open={paymentResult !== null} onOpenChange={(open) => !open && setPaymentResult(null)}>
+          <AlertDialogContent className="sm:max-w-sm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>{paymentResult?.title}</AlertDialogTitle>
+              <AlertDialogDescription>{paymentResult?.description}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogAction onClick={() => setPaymentResult(null)}>OK</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <Card className="max-w-2xl">
           <CardHeader>
