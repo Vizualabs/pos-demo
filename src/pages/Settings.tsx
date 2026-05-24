@@ -44,10 +44,18 @@ import {
 
 const Settings = () => {
   const navigate = useNavigate()
+  const GENERAL_SETTINGS_KEY = "posGeneralSettings"
   const [printCfg, setPrintCfg] = useState<PrintPrinterConfig>(() => loadPrintPrinterConfig())
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [activeTab, setActiveTab] = useState("general")
+  const [generalSettings, setGeneralSettings] = useState({
+    restaurantName: "RestaurantOS",
+    restaurantAddress: "123 Main Street, Downtown",
+    restaurantPhone: "+1 (555) 123-4567",
+    restaurantEmail: "info@restaurantos.com",
+    autoSave: true,
+  })
   const [userDetailsLoading, setUserDetailsLoading] = useState(false)
   const [userDetailsUpdating, setUserDetailsUpdating] = useState(false)
   const [personalInfo, setPersonalInfo] = useState({
@@ -63,6 +71,23 @@ const Settings = () => {
     confirmPassword: "",
   })
   const [passwordLoading, setPasswordLoading] = useState(false)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(GENERAL_SETTINGS_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw) as Partial<typeof generalSettings>
+      setGeneralSettings((prev) => ({ ...prev, ...parsed }))
+    } catch (error) {
+      console.error("Failed to load general settings:", error)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!generalSettings.autoSave) return
+    localStorage.setItem(GENERAL_SETTINGS_KEY, JSON.stringify(generalSettings))
+  }, [generalSettings])
 
   // Fetch user details
   const fetchUserDetails = async (isLoading = true) => {
@@ -142,22 +167,23 @@ const Settings = () => {
     localStorage.removeItem("isLoggedIn")
     localStorage.removeItem("token")
     localStorage.removeItem("user")
-    navigate("/pos", { replace: true })
+    navigate("/login", { replace: true })
   }
 
   const handleChangePassword = async () => {
+    setPasswordError(null)
     if (!passwordForm.oldPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
-      toast.error("Please fill in all password fields")
+      setPasswordError("Please fill in all password fields")
       return
     }
 
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      toast.error("New passwords do not match")
+      setPasswordError("New passwords do not match")
       return
     }
 
     if (passwordForm.newPassword.length < 6) {
-      toast.error("New password must be at least 6 characters")
+      setPasswordError("New password must be at least 6 characters")
       return
     }
 
@@ -183,7 +209,7 @@ const Settings = () => {
       setShowPasswordDialog(false)
       setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "An error occurred")
+      setPasswordError(error instanceof Error ? error.message : "An error occurred")
     } finally {
       setPasswordLoading(false)
     }
@@ -204,7 +230,7 @@ const Settings = () => {
             <div className="flex gap-2">
               <Button
                 onClick={() => setShowLogoutDialog(true)}
-                className="modern-button bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white shadow-lg hover:shadow-red-500/25 border-0 transition-all duration-200"
+                variant="destructive"
               >
                 <LogOut className="w-4 h-4 mr-2" />
                 Logout
@@ -239,20 +265,49 @@ const Settings = () => {
                   <CardContent className="space-y-4">
                     <div>
                       <Label htmlFor="restaurant-name">Restaurant Name</Label>
-                      <Input id="restaurant-name" defaultValue="RestaurantOS" className="mt-1" />
+                      <Input
+                        id="restaurant-name"
+                        value={generalSettings.restaurantName}
+                        onChange={(e) => setGeneralSettings((prev) => ({ ...prev, restaurantName: e.target.value }))}
+                        className="mt-1"
+                      />
                     </div>
                     <div>
                       <Label htmlFor="restaurant-address">Address</Label>
-                      <Input id="restaurant-address" defaultValue="123 Main Street, Downtown" className="mt-1" />
+                      <Input
+                        id="restaurant-address"
+                        value={generalSettings.restaurantAddress}
+                        onChange={(e) => setGeneralSettings((prev) => ({ ...prev, restaurantAddress: e.target.value }))}
+                        className="mt-1"
+                      />
                     </div>
                     <div>
                       <Label htmlFor="restaurant-phone">Phone Number</Label>
-                      <Input id="restaurant-phone" defaultValue="+1 (555) 123-4567" className="mt-1" />
+                      <Input
+                        id="restaurant-phone"
+                        value={generalSettings.restaurantPhone}
+                        onChange={(e) => setGeneralSettings((prev) => ({ ...prev, restaurantPhone: e.target.value }))}
+                        className="mt-1"
+                      />
                     </div>
                     <div>
                       <Label htmlFor="restaurant-email">Email</Label>
-                      <Input id="restaurant-email" defaultValue="info@restaurantos.com" className="mt-1" />
+                      <Input
+                        id="restaurant-email"
+                        value={generalSettings.restaurantEmail}
+                        onChange={(e) => setGeneralSettings((prev) => ({ ...prev, restaurantEmail: e.target.value }))}
+                        className="mt-1"
+                      />
                     </div>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        localStorage.setItem(GENERAL_SETTINGS_KEY, JSON.stringify(generalSettings))
+                        toast.success("General settings saved")
+                      }}
+                    >
+                      Save general settings
+                    </Button>
                   </CardContent>
                 </Card>
 
@@ -269,7 +324,10 @@ const Settings = () => {
                         <Label>Auto-save</Label>
                         <p className="text-sm text-muted-foreground">Automatically save changes</p>
                       </div>
-                      <Switch defaultChecked />
+                      <Switch
+                        checked={generalSettings.autoSave}
+                        onCheckedChange={(checked) => setGeneralSettings((prev) => ({ ...prev, autoSave: checked }))}
+                      />
                     </div>
                   </CardContent>
                 </Card>
@@ -524,7 +582,7 @@ const Settings = () => {
             <AlertDialogFooter className="flex-col gap-3 mt-6 sm:flex-col">
               <AlertDialogAction
                 onClick={handleLogout}
-                className="w-full h-11 rounded-xl bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-semibold border-0 shadow-lg shadow-red-500/25 hover:shadow-red-500/40 transition-all duration-200"
+                className="w-full h-11 rounded-xl"
               >
                 <LogOut className="w-4 h-4 mr-2" />
                 Yes, Logout
@@ -591,13 +649,18 @@ const Settings = () => {
                   className="mt-2"
                 />
               </div>
+              {passwordError ? (
+                <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {passwordError}
+                </p>
+              ) : null}
             </div>
 
             <AlertDialogFooter className="flex-col gap-3 mt-6 sm:flex-col">
               <AlertDialogAction
                 onClick={handleChangePassword}
                 disabled={passwordLoading}
-                className="w-full h-11 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold border-0 shadow-lg shadow-green-500/25 hover:shadow-green-500/40 transition-all duration-200 disabled:opacity-50"
+                className="w-full h-11 rounded-xl disabled:opacity-50"
               >
                 <Lock className="w-4 h-4 mr-2" />
                 {passwordLoading ? "Updating..." : "Update Password"}

@@ -17,16 +17,39 @@ import {
 } from "@/lib/customerMealInvoicesApi"
 import { generateCustomerMealInvoicePdf, generatePDF } from "@/lib/pdfUtils"
 import { formatCurrency, formatCurrencyCompact } from "@/lib/utils"
-import { CheckCircle, Clock, DollarSign, Download, Trash2 } from "lucide-react"
+import { CheckCircle, Clock, DollarSign, Download, Plus, Trash2, X } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 
 const MEAL_TYPES: MealType[] = ["BREAKFAST", "LUNCH", "DINNER"]
+type InvoiceLineDraft = {
+  mealType: MealType
+  quantity: string
+  unitPrice: string
+}
 
 function isEmptyBackendListError(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e)
   const m = msg.toLowerCase()
   return m.includes("not.found") || m.includes("no invoice") || m.includes("no invoice records")
+}
+function getApiErrorMessage(e: unknown, fallback: string): string {
+  if (e instanceof Error && e.message) return e.message
+  if (typeof e === "object" && e !== null) {
+    const err = e as {
+      response?: { data?: { message?: string; error?: string; errors?: unknown } }
+      message?: string
+    }
+    const msg =
+      err.response?.data?.message ??
+      err.response?.data?.error ??
+      (Array.isArray(err.response?.data?.errors)
+        ? (err.response?.data?.errors as string[]).join(", ")
+        : undefined) ??
+      err.message
+    if (msg && String(msg).trim().length > 0) return String(msg)
+  }
+  return fallback
 }
 
 const Accounting = () => {
@@ -35,9 +58,9 @@ const Accounting = () => {
 
   const [customerId, setCustomerId] = useState("")
   const [customerName, setCustomerName] = useState("")
-  const [mealType, setMealType] = useState<MealType>("LUNCH")
-  const [quantity, setQuantity] = useState("1")
-  const [unitPrice, setUnitPrice] = useState("650")
+  const [invoiceLines, setInvoiceLines] = useState<InvoiceLineDraft[]>([
+    { mealType: "LUNCH", quantity: "1", unitPrice: "650" },
+  ])
 
   useEffect(() => {
     let cancelled = false
@@ -87,40 +110,53 @@ const Accounting = () => {
       return
     }
 
-    const qty = Number.parseFloat(quantity)
-    const price = Number.parseFloat(unitPrice)
-    if (!MEAL_TYPES.includes(mealType)) {
-      toast.error("Meal type is required.")
-      return
-    }
-    if (!Number.isFinite(qty) || qty <= 0) {
-      toast.error("Quantity must be greater than zero.")
-      return
-    }
-    if (!Number.isFinite(price) || price <= 0) {
-      toast.error("Unit price must be greater than zero (LKR).")
+    if (invoiceLines.length === 0) {
+      toast.error("Add at least one invoice line.")
       return
     }
 
+    for (const [idx, line] of invoiceLines.entries()) {
+      const qty = Number.parseFloat(line.quantity)
+      const price = Number.parseFloat(line.unitPrice)
+      if (!MEAL_TYPES.includes(line.mealType)) {
+        toast.error(`Meal type is required for line ${idx + 1}.`)
+        return
+      }
+      if (!Number.isFinite(qty) || qty <= 0) {
+        toast.error(`Quantity must be greater than zero for line ${idx + 1}.`)
+        return
+      }
+      if (!Number.isFinite(price) || price <= 0) {
+        toast.error(`Unit price must be greater than zero for line ${idx + 1}.`)
+        return
+      }
+    }
+
     try {
-      const created = await createCustomerMealInvoice({
-        ...(hasCustomerId
-          ? { customerId: parsedCustomerId, customerName: null }
-          : { customerId: null, customerName: customerName.trim() }),
-        mealType,
-        quantity: qty,
-        unitPrice: price,
-      })
-      setInvoices((prev) => [created, ...prev])
+      const createdRows: CustomerMealInvoiceResponseDto[] = []
+      for (const line of invoiceLines) {
+        const created = await createCustomerMealInvoice({
+          ...(hasCustomerId
+            ? { customerId: parsedCustomerId, customerName: null }
+            : { customerId: null, customerName: customerName.trim() }),
+          mealType: line.mealType,
+          quantity: Number.parseFloat(line.quantity),
+          unitPrice: Number.parseFloat(line.unitPrice),
+        })
+        createdRows.push(created)
+      }
+      setInvoices((prev) => [...createdRows.reverse(), ...prev])
       setCustomerId("")
       setCustomerName("")
-      setMealType("LUNCH")
-      setQuantity("1")
-      setUnitPrice("650")
-      toast.success("Invoice created.")
+      setInvoiceLines([{ mealType: "LUNCH", quantity: "1", unitPrice: "650" }])
+      toast.success(
+        createdRows.length === 1
+          ? "Invoice created."
+          : `${createdRows.length} invoice lines created successfully.`,
+      )
     } catch (e) {
       console.error(e)
-      toast.error(e instanceof Error ? e.message : "Could not create invoice.")
+      toast.error(getApiErrorMessage(e, "Could not create invoice."))
     }
   }
 
@@ -131,7 +167,7 @@ const Accounting = () => {
       toast.success("Marked paid.")
     } catch (e) {
       console.error(e)
-      toast.error(e instanceof Error ? e.message : "Could not mark paid.")
+      toast.error(getApiErrorMessage(e, "Could not mark paid."))
     }
   }
 
@@ -143,7 +179,7 @@ const Accounting = () => {
       toast.success("Invoice deleted.")
     } catch (e) {
       console.error(e)
-      toast.error(e instanceof Error ? e.message : "Could not delete invoice.")
+      toast.error(getApiErrorMessage(e, "Could not delete invoice."))
     }
   }
 
@@ -213,8 +249,7 @@ const Accounting = () => {
               <CardHeader>
                 <CardTitle>Create invoice</CardTitle>
                 <CardDescription>
-                  Meal type must be one of: BREAKFAST, LUNCH, DINNER. Provide either a Customer ID (recommended) or type a
-                  Customer name.
+                  Add one or more meal lines. Each line creates a backend invoice row under the same customer.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 pdf-hide">
@@ -240,46 +275,80 @@ const Accounting = () => {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="grid gap-2">
-                    <Label htmlFor="cmi-mealType">Meal type</Label>
-                    <select
-                      id="cmi-mealType"
-                      value={mealType}
-                      onChange={(e) => setMealType(e.target.value as MealType)}
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
-                    >
-                      {MEAL_TYPES.map((mt) => (
-                        <option key={mt} value={mt}>
-                          {mt}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="space-y-3">
+                  {invoiceLines.map((line, idx) => (
+                    <div key={idx} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end rounded-md border p-3">
+                      <div className="grid gap-2">
+                        <Label>Meal type</Label>
+                        <select
+                          value={line.mealType}
+                          onChange={(e) =>
+                            setInvoiceLines((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, mealType: e.target.value as MealType } : r)),
+                            )
+                          }
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background"
+                        >
+                          {MEAL_TYPES.map((mt) => (
+                            <option key={mt} value={mt}>
+                              {mt}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-                  <div className="grid gap-2">
-                    <Label htmlFor="cmi-qty">Quantity</Label>
-                    <Input
-                      id="cmi-qty"
-                      type="number"
-                      min="0.01"
-                      step="0.01"
-                      value={quantity}
-                      onChange={(e) => setQuantity(e.target.value)}
-                    />
-                  </div>
+                      <div className="grid gap-2">
+                        <Label>Quantity</Label>
+                        <Input
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={line.quantity}
+                          onChange={(e) =>
+                            setInvoiceLines((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, quantity: e.target.value } : r)),
+                            )
+                          }
+                        />
+                      </div>
 
-                  <div className="grid gap-2">
-                    <Label htmlFor="cmi-unit">Unit price (LKR)</Label>
-                    <Input
-                      id="cmi-unit"
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={unitPrice}
-                      onChange={(e) => setUnitPrice(e.target.value)}
-                    />
-                  </div>
+                      <div className="grid gap-2">
+                        <Label>Unit price (LKR)</Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={line.unitPrice}
+                          onChange={(e) =>
+                            setInvoiceLines((prev) =>
+                              prev.map((r, i) => (i === idx ? { ...r, unitPrice: e.target.value } : r)),
+                            )
+                          }
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        disabled={invoiceLines.length <= 1}
+                        onClick={() => setInvoiceLines((prev) => prev.filter((_, i) => i !== idx))}
+                        aria-label="Remove line"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-fit"
+                    onClick={() =>
+                      setInvoiceLines((prev) => [...prev, { mealType: "LUNCH", quantity: "1", unitPrice: "650" }])
+                    }
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add line
+                  </Button>
                 </div>
 
                 <Button type="button" className="w-fit" onClick={() => void handleCreate()}>

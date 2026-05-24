@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { DashboardLayout } from "@/components/Layout/DashboardLayout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,8 @@ import { formatCurrency } from "@/lib/utils"
 import { formatItemCode } from "@/lib/itemCode"
 import { getAllProducts, type ProductResponseDto, type PortionSize } from "@/lib/productsApi"
 import { getAllCategories, type CategoryResponseDto } from "@/lib/categoriesApi"
+import { apiFetchBlob } from "@/lib/apiClient"
+import { applyInventoryUsageDeductions } from "@/lib/inventoryApi"
 import {
   createOrder,
   type Kitchen,
@@ -112,6 +114,23 @@ const getUnitPriceForPortion = (item: ProductResponseDto, portionSize?: PortionS
   return typeof price === "number" && Number.isFinite(price) ? price : item.sellingPrice
 }
 
+function buildInventoryUsageFromCart(
+  cart: CartItem[],
+  productById: Map<number, ProductResponseDto>,
+): Array<{ itemId: number; quantity: number }> {
+  const usage = new Map<number, number>()
+  for (const line of cart) {
+    const product = productById.get(line.productId)
+    if (!product?.recipe || product.recipe.length === 0) continue
+    for (const recipeLine of product.recipe) {
+      const qty = Number(recipeLine.quantity) * Number(line.quantity)
+      if (!Number.isFinite(qty) || qty <= 0) continue
+      usage.set(recipeLine.itemId, (usage.get(recipeLine.itemId) ?? 0) + qty)
+    }
+  }
+  return Array.from(usage, ([itemId, quantity]) => ({ itemId, quantity: Number(quantity.toFixed(3)) }))
+}
+
 function billPortionLabelForCart(c: CartItem): string | undefined {
   if (c.portionSize === "MEDIUM") return "Medium"
   if (c.portionSize === "LARGE") return "Large"
@@ -135,6 +154,12 @@ const POS = () => {
   const [draftPortion, setDraftPortion] = useState<PortionSize | null>(null)
   const [draftLineNote, setDraftLineNote] = useState("")
   const [lastReceipt, setLastReceipt] = useState<OrderBillsPayload | null>(null)
+  const [imageObjectUrls, setImageObjectUrls] = useState<Record<number, { imageUrl: string; objectUrl: string }>>({})
+  const imageObjectUrlsRef = useRef(imageObjectUrls)
+
+  useEffect(() => {
+    imageObjectUrlsRef.current = imageObjectUrls
+  }, [imageObjectUrls])
 
   const handleCategoryDragStart = (event: React.DragEvent<HTMLButtonElement>, categoryId: number) => {
     event.dataTransfer.effectAllowed = "move"
@@ -181,6 +206,73 @@ const POS = () => {
 
     return () => {
       cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const currentIds = new Set(menuItems.map((i) => i.productId))
+
+    setImageObjectUrls((prev) => {
+      let changed = false
+      const next: typeof prev = {}
+      for (const [k, v] of Object.entries(prev)) {
+        const id = Number(k)
+        const item = menuItems.find((i) => i.productId === id)
+        if (!currentIds.has(id) || !item?.imageUrl || item.imageUrl !== v.imageUrl) {
+          changed = true
+          URL.revokeObjectURL(v.objectUrl)
+          continue
+        }
+        next[id] = v
+      }
+      return changed ? next : prev
+    })
+
+    const toFetch = menuItems.filter((i) => i.imageUrl && !i.imageUrl.startsWith("http"))
+    if (toFetch.length === 0) return
+
+    ;(async () => {
+      for (const item of toFetch) {
+        if (cancelled) return
+        const existing = imageObjectUrlsRef.current[item.productId]
+        if (existing?.imageUrl === item.imageUrl) continue
+        try {
+          let blob: Blob
+          try {
+            blob = await apiFetchBlob(item.imageUrl!)
+          } catch {
+            blob = await apiFetchBlob(`/api/products/${item.productId}/image`)
+          }
+          const objectUrl = URL.createObjectURL(blob)
+          if (cancelled) {
+            URL.revokeObjectURL(objectUrl)
+            return
+          }
+          setImageObjectUrls((prev) => {
+            const prevEntry = prev[item.productId]
+            if (prevEntry) URL.revokeObjectURL(prevEntry.objectUrl)
+            return {
+              ...prev,
+              [item.productId]: { imageUrl: item.imageUrl!, objectUrl },
+            }
+          })
+        } catch (e) {
+          console.warn("Failed to load POS product image", item.productId, e)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [menuItems])
+
+  useEffect(() => {
+    return () => {
+      for (const v of Object.values(imageObjectUrlsRef.current)) {
+        URL.revokeObjectURL(v.objectUrl)
+      }
     }
   }, [])
 
@@ -380,6 +472,20 @@ const POS = () => {
         )
       }
 
+      if (status === "PAID") {
+        const productById = new Map<number, ProductResponseDto>()
+        for (const p of menuItems) productById.set(p.productId, p)
+        const usageLines = buildInventoryUsageFromCart(cart, productById)
+        if (usageLines.length > 0) {
+          try {
+            await applyInventoryUsageDeductions(usageLines)
+          } catch (inventoryError) {
+            console.error(inventoryError)
+            toast.warning("Order was placed, but inventory update failed.")
+          }
+        }
+      }
+
       return order
     } catch (e) {
       console.error(e)
@@ -443,7 +549,14 @@ const POS = () => {
       <div className="mb-2 text-sm text-muted-foreground">Showing {items.length} items</div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {items.map((item) => {
-          const hasImage = Boolean(item.imageUrl)
+          const rawUrl = item.imageUrl
+          const resolvedUrl =
+            rawUrl && rawUrl.startsWith("http")
+              ? rawUrl
+              : rawUrl
+                ? (imageObjectUrls[item.productId]?.objectUrl ?? rawUrl)
+                : undefined
+          const hasImage = Boolean(resolvedUrl)
 
           return (
             <Card
@@ -457,7 +570,7 @@ const POS = () => {
                     {formatItemCode(item.productId)}
                   </span>
                   <img
-                    src={item.imageUrl ?? undefined}
+                    src={resolvedUrl}
                     alt={item.name}
                     className="w-full h-full object-cover"
                     style={{ display: hasImage ? undefined : "none" }}
