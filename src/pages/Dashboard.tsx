@@ -5,9 +5,14 @@ import { useLocation } from "react-router-dom"
 import { DashboardLayout } from "@/components/Layout/DashboardLayout"
 import { StatCard } from "@/components/Dashboard/StatCard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { DollarSign, ShoppingCart, Users, TrendingUp, Clock, CheckCircle, Store } from "lucide-react"
+import { DollarSign, ShoppingCart, Users, TrendingUp, Clock, CheckCircle, XCircle, Store } from "lucide-react"
 import { formatCurrency, formatCurrencyCompact } from "@/lib/utils"
-import { getAllOrders, type OrderResponseDto } from "@/lib/ordersApi"
+import {
+  getAllOrders,
+  ORDERS_CHANGED_EVENT,
+  ORDERS_CHANGED_STORAGE_KEY,
+  type OrderResponseDto,
+} from "@/lib/ordersApi"
 import { getAllOrderItems, type OrderItemResponseDto } from "@/lib/orderItemsApi"
 import { getAllProducts, type ProductResponseDto } from "@/lib/productsApi"
 import { getAllInventoryItems, type InventoryItemResponseDto } from "@/lib/inventoryApi"
@@ -49,12 +54,19 @@ function fmtChangeLabel(p: number | null) {
   return `${sign}${abs.toFixed(1)}% from yesterday`
 }
 
+function normalizeOrderStatus(value: unknown): "NEW" | "PAID" | "CANCELLED" | "UPDATED" {
+  const v = String(value ?? "").trim().toUpperCase()
+  if (v === "CANCELED") return "CANCELLED"
+  if (v === "NEW" || v === "PAID" || v === "CANCELLED" || v === "UPDATED") return v
+  return "NEW"
+}
+
 type RecentOrderRow = {
   idLabel: string
   subLabel: string
   amount: number
   statusLabel: string
-  icon: "paid" | "clock"
+  icon: "paid" | "clock" | "cancelled"
   timeLabel: string
 }
 
@@ -82,7 +94,8 @@ const Dashboard = () => {
     if (location.pathname !== "/dashboard") return
 
     let cancelled = false
-    const fetchDashboardData = async () => {
+
+    const load = async () => {
       setLoading(true)
       try {
         const [o, oi, p, inv] = await Promise.allSettled([
@@ -103,20 +116,23 @@ const Dashboard = () => {
       }
     }
 
-    void fetchDashboardData()
-    const intervalId = window.setInterval(() => {
-      void fetchDashboardData()
-    }, 15000)
-
-    const onFocus = () => {
-      void fetchDashboardData()
+    const onOrdersChanged = () => {
+      void load()
     }
-    window.addEventListener("focus", onFocus)
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === ORDERS_CHANGED_STORAGE_KEY) void load()
+    }
+
+    void load()
+
+    window.addEventListener(ORDERS_CHANGED_EVENT, onOrdersChanged)
+    window.addEventListener("storage", onStorage)
 
     return () => {
       cancelled = true
-      window.clearInterval(intervalId)
-      window.removeEventListener("focus", onFocus)
+      window.removeEventListener(ORDERS_CHANGED_EVENT, onOrdersChanged)
+      window.removeEventListener("storage", onStorage)
     }
   }, [location.pathname])
 
@@ -150,13 +166,13 @@ const Dashboard = () => {
 
   const todaysRevenue = useMemo(() => {
     // Prefer PAID orders; fall back to all if backend doesn’t use PAID consistently
-    const paid = todaysOrders.filter((o) => String(o.status).toUpperCase() === "PAID")
+    const paid = todaysOrders.filter((o) => normalizeOrderStatus(o.status) === "PAID")
     const list = paid.length > 0 ? paid : todaysOrders
     return list.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0)
   }, [todaysOrders])
 
   const yesterdaysRevenue = useMemo(() => {
-    const paid = yesterdaysOrders.filter((o) => String(o.status).toUpperCase() === "PAID")
+    const paid = yesterdaysOrders.filter((o) => normalizeOrderStatus(o.status) === "PAID")
     const list = paid.length > 0 ? paid : yesterdaysOrders
     return list.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0)
   }, [yesterdaysOrders])
@@ -179,7 +195,7 @@ const Dashboard = () => {
     const set = new Set<number>()
     for (const o of todaysOrders) {
       const isDineIn = String(o.orderType).toUpperCase() === "DINE_IN"
-      const isNew = String(o.status).toUpperCase() === "NEW"
+      const isNew = normalizeOrderStatus(o.status) === "NEW"
       const tn = o.tableNumber
       if (isDineIn && isNew && typeof tn === "number") set.add(tn)
     }
@@ -195,8 +211,9 @@ const Dashboard = () => {
 
     const top = sorted.slice(0, 4)
     return top.map((o) => {
-      const status = String(o.status).toUpperCase()
+      const status = normalizeOrderStatus(o.status)
       const isPaid = status === "PAID"
+      const isCancelled = status === "CANCELLED"
       const dt = new Date(o.createdAt ?? o.orderDate)
       const mins = Math.max(0, Math.floor((Date.now() - dt.getTime()) / 60000))
       const timeLabel = mins < 1 ? "Just now" : mins < 60 ? `${mins} min ago` : dt.toLocaleTimeString()
@@ -211,7 +228,7 @@ const Dashboard = () => {
         subLabel,
         amount: Number(o.totalAmount) || 0,
         statusLabel: status,
-        icon: isPaid ? "paid" : "clock",
+        icon: isPaid ? "paid" : isCancelled ? "cancelled" : "clock",
         timeLabel,
       }
     })
@@ -391,11 +408,15 @@ const Dashboard = () => {
                             className={`p-3 rounded-xl ${
                               o.icon === "paid"
                                 ? "bg-success/20 text-success"
-                                : "bg-warning/20 text-warning"
+                                : o.icon === "cancelled"
+                                  ? "bg-destructive/20 text-destructive"
+                                  : "bg-warning/20 text-warning"
                             }`}
                           >
                             {o.icon === "paid" ? (
                               <CheckCircle className="w-5 h-5" />
+                            ) : o.icon === "cancelled" ? (
+                              <XCircle className="w-5 h-5" />
                             ) : (
                               <Clock className="w-5 h-5" />
                             )}
@@ -407,7 +428,9 @@ const Dashboard = () => {
                         </div>
                         <div className="text-right">
                           <p className="font-bold text-lg">{formatCurrency(o.amount)}</p>
-                          <p className="text-sm text-muted-foreground">{o.timeLabel}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {o.statusLabel} · {o.timeLabel}
+                          </p>
                         </div>
                       </div>
                     ))}

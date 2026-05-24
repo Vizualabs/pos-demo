@@ -34,7 +34,7 @@ const App = () => (
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
                 <Dashboard />
               </ProtectedRoute>
             }
@@ -50,7 +50,7 @@ const App = () => (
           <Route
             path="/qr-menu"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
                 <QRMenu />
               </ProtectedRoute>
             }
@@ -58,7 +58,7 @@ const App = () => (
           <Route
             path="/menu-items"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
                 <MenuItems />
               </ProtectedRoute>
             }
@@ -74,7 +74,7 @@ const App = () => (
           <Route
             path="/inventory"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
                 <Inventory />
               </ProtectedRoute>
             }
@@ -82,7 +82,7 @@ const App = () => (
           <Route
             path="/staff"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
                 <Staff />
               </ProtectedRoute>
             }
@@ -90,7 +90,7 @@ const App = () => (
           <Route
             path="/attendance"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
                 <Attendance />
               </ProtectedRoute>
             }
@@ -98,7 +98,7 @@ const App = () => (
           <Route
             path="/accounting"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
                 <Accounting />
               </ProtectedRoute>
             }
@@ -106,7 +106,7 @@ const App = () => (
           <Route
             path="/crm"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
                 <CRM />
               </ProtectedRoute>
             }
@@ -114,7 +114,7 @@ const App = () => (
           <Route
             path="/branches"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={["ADMIN"]}>
                 <MultiBranch />
               </ProtectedRoute>
             }
