@@ -181,8 +181,22 @@ const Inventory = () => {
 
   const handleSaveUsage = async () => {
     const payload = usageLines
-      .filter((l) => l.itemId !== "")
+      .filter((l) => l.itemId !== "" || l.quantity.trim() !== "")
       .map((l) => ({ itemId: l.itemId as number, quantity: Number(l.quantity) }))
+    if (payload.length === 0) {
+      toast.error("Add at least one usage line.")
+      return
+    }
+    for (const line of payload) {
+      if (!Number.isFinite(line.itemId) || line.itemId <= 0) {
+        toast.error("Select a valid inventory item for each line.")
+        return
+      }
+      if (!Number.isFinite(line.quantity) || line.quantity <= 0) {
+        toast.error("Qty used must be greater than 0 for each line.")
+        return
+      }
+    }
     setUsageSaving(true)
     try {
       const next = await applyInventoryUsageDeductions(payload)
