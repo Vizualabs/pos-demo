@@ -35,7 +35,7 @@ import {
   type OrderItemResponseDto,
   createOrderItem,
   deleteOrderItem,
-  patchOrderItem,
+  updateOrderItem,
   type PortionType,
 } from "@/lib/orderItemsApi"
 import { SinhalaReceiptDialog } from "@/components/POS/SinhalaReceiptDialog"
@@ -801,11 +801,12 @@ function EditOrderDialog({
     )
   }
 
-  const updateNewLinePortion = (index: number, portion: PortionType | null) => {
+  const updateLinePortion = (index: number, portion: PortionType | null) => {
     setDraftLines((prev) =>
       prev.map((line, i) => {
-        if (i !== index || line.kind !== "new" || line.productId === "") return line
-        const product = products.find((p) => p.productId === line.productId)
+        if (i !== index) return line
+        const pid = line.kind === "new" ? (line.productId === "" ? undefined : line.productId) : line.productId
+        const product = pid != null ? products.find((p) => p.productId === pid) : undefined
         if (!product) return line
         return {
           ...line,
@@ -815,6 +816,8 @@ function EditOrderDialog({
       }),
     )
   }
+
+  const updateNewLinePortion = (index: number, portion: PortionType | null) => updateLinePortion(index, portion)
 
   const handleSave = async () => {
     if (!order) return
@@ -855,8 +858,11 @@ function EditOrderDialog({
       for (const line of draftLines) {
         const subtotal = Number((line.unitPrice * line.quantity).toFixed(2))
         if (line.kind === "existing") {
-          await patchOrderItem(line.orderItemId, {
+          await updateOrderItem(line.orderItemId, {
+            orderId: order.orderId,
+            productId: line.productId,
             quantity: line.quantity,
+            portionType: line.portionType,
             unitPrice: line.unitPrice,
             subtotal,
           })
@@ -972,16 +978,27 @@ function EditOrderDialog({
                     {line.kind === "existing" ? (
                       <>
                         <div className="flex items-start justify-between gap-2">
-                          <span className="text-sm font-medium leading-tight">
-                            {line.name}
-                            {line.portionType ? (
-                              <span className="text-muted-foreground font-normal"> ({line.portionType})</span>
-                            ) : null}
-                          </span>
+                          <span className="text-sm font-medium leading-tight">{line.name}</span>
                           <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive" onClick={() => removeLineAt(idx)} aria-label="Remove line">
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
+                        {products.find((p) => p.productId === line.productId)?.hasPortionPricing ? (
+                          <div className="grid gap-1">
+                            <Label className="text-xs text-muted-foreground">Portion</Label>
+                            <select
+                              className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                              value={line.portionType ?? "MEDIUM"}
+                              onChange={(e) => {
+                                const v = e.target.value
+                                updateLinePortion(idx, v === "MEDIUM" || v === "LARGE" ? v : null)
+                              }}
+                            >
+                              <option value="MEDIUM">Medium</option>
+                              <option value="LARGE">Large</option>
+                            </select>
+                          </div>
+                        ) : null}
                         <div className="grid grid-cols-[1fr_auto_auto] gap-2 items-end">
                           <div className="grid gap-1">
                             <Label className="text-xs text-muted-foreground">Qty</Label>
