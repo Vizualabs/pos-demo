@@ -390,10 +390,22 @@ const MenuItems = () => {
             existingProduct.portionPrices?.LARGE !== payload.portionPrices?.LARGE)
         const shouldSendPortionPricing = portionPricingChanged || portionPricesChanged
 
+        const prevRecipe = existingProduct.recipe ?? []
+        const nextRecipe = payload.recipe ?? []
+        const recipeChanged =
+          prevRecipe.length !== nextRecipe.length ||
+          nextRecipe.some((nr) => {
+            const pr = prevRecipe.find((r) => r.itemId === nr.itemId)
+            return !pr || pr.quantity !== nr.quantity
+          }) ||
+          prevRecipe.some((pr) => !nextRecipe.find((r) => r.itemId === pr.itemId))
+        const shouldSendRecipe = recipeChanged
+
         saved = await updateProduct(
           existingProduct.productId,
           { ...payload, categoryId: payload.categoryId as number },
           !shouldSendPortionPricing,
+          !shouldSendRecipe,
         )
 
         // Keep UI consistent even if backend does not echo recipe back.
