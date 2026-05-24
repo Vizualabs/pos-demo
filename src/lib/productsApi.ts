@@ -178,7 +178,7 @@ function normalizeProduct(raw: unknown): ProductResponseDto {
   }
 }
 
-function toBackendProductRequest(payload: ProductRequestDto, skipPortionPrices = false): Record<string, unknown> {
+function toBackendProductRequest(payload: ProductRequestDto, skipPortionPrices = false, skipRecipe = false): Record<string, unknown> {
   const base: Record<string, unknown> = {
     categoryId: payload.categoryId,
     kitchen: payload.kitchen,
@@ -189,9 +189,6 @@ function toBackendProductRequest(payload: ProductRequestDto, skipPortionPrices =
     sellingPrice: payload.sellingPrice,
     imageUrl: payload.imageUrl,
     isAvailable: payload.isAvailable,
-    recipe: toBackendRecipeLines(payload.recipe),
-    // Common alias for recipe arrays.
-    recipeLines: toBackendRecipeLines(payload.recipe),
     skipKitchenTicket: payload.skipKitchenTicket ?? false,
   }
   // Backend PUT always INSERTs portion-price rows instead of UPDATEing existing
@@ -200,6 +197,12 @@ function toBackendProductRequest(payload: ProductRequestDto, skipPortionPrices =
   if (!skipPortionPrices) {
     base.hasPortionPricing = payload.hasPortionPricing
     base.portionPrices = payload.portionPrices
+  }
+  // Same INSERT-instead-of-UPDATE bug affects recipe items (uk_pri_product_item).
+  // Omit recipe fields when the recipe has not changed.
+  if (!skipRecipe) {
+    base.recipe = toBackendRecipeLines(payload.recipe)
+    base.recipeLines = toBackendRecipeLines(payload.recipe)
   }
   if (payload.productId != null) base.productId = payload.productId
   return base
@@ -249,9 +252,9 @@ export async function createProduct(payload: ProductRequestDto): Promise<Product
   }
 }
 
-export async function updateProduct(productId: number, payload: ProductRequestDto, skipPortionPrices = false): Promise<ProductResponseDto> {
+export async function updateProduct(productId: number, payload: ProductRequestDto, skipPortionPrices = false, skipRecipe = false): Promise<ProductResponseDto> {
   // Many backends expect the ID both in the URL and the body for PUT.
-  const res = await axiosClient.put<unknown>(`/products/${productId}`, toBackendProductRequest({ ...payload, productId }, skipPortionPrices))
+  const res = await axiosClient.put<unknown>(`/products/${productId}`, toBackendProductRequest({ ...payload, productId }, skipPortionPrices, skipRecipe))
   const updated = normalizeProduct(res.data)
   return {
     ...updated,
