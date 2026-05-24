@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { FeatureKey } from "@/config/features";
 import { featureConfigs } from "@/config/features";
+import { useAuth, type UserRole } from "@/hooks/useAuth";
 
 type MenuItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -23,25 +24,30 @@ type MenuItem = {
   path: string;
   badge: string | null;
   featureKey?: FeatureKey;
+  visibleFor?: UserRole[];
 };
 
 const menuItems: MenuItem[] = [
-  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard", badge: null },
+  { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard", badge: null, visibleFor: ["ADMIN"] },
   { icon: ShoppingCart, label: "POS Terminal", path: "/pos", badge: "Hot" },
-  { icon: UtensilsCrossed, label: "Menu Items", path: "/menu-items", badge: null },
+  { icon: UtensilsCrossed, label: "Menu Items", path: "/menu-items", badge: null, visibleFor: ["ADMIN"] },
   { icon: ClipboardList, label: "Orders", path: "/orders", badge: null },
-  { icon: QrCode, label: "QR Ordering", path: "/qr-menu", badge: null, featureKey: "qrOrdering" },
-  { icon: Package, label: "Inventory", path: "/inventory", badge: null },
-  { icon: Users, label: "Staff & HR", path: "/staff", badge: null, featureKey: "staffHr" },
-  { icon: Calendar, label: "Attendance", path: "/attendance", badge: null, featureKey: "attendance" },
-  { icon: DollarSign, label: "Accounting", path: "/accounting", badge: null },
-  { icon: UserCircle, label: "CRM", path: "/crm", badge: null, featureKey: "crm" },
-  { icon: Store, label: "Multi-Branch", path: "/branches", badge: null, featureKey: "multiBranch" },
+  { icon: QrCode, label: "QR Ordering", path: "/qr-menu", badge: null, featureKey: "qrOrdering", visibleFor: ["ADMIN"] },
+  { icon: Package, label: "Inventory", path: "/inventory", badge: null, visibleFor: ["ADMIN"] },
+  { icon: Users, label: "Staff & HR", path: "/staff", badge: null, featureKey: "staffHr", visibleFor: ["ADMIN"] },
+  { icon: Calendar, label: "Attendance", path: "/attendance", badge: null, featureKey: "attendance", visibleFor: ["ADMIN"] },
+  { icon: DollarSign, label: "Accounting", path: "/accounting", badge: null, visibleFor: ["ADMIN"] },
+  { icon: UserCircle, label: "CRM", path: "/crm", badge: null, featureKey: "crm", visibleFor: ["ADMIN"] },
+  { icon: Store, label: "Multi-Branch", path: "/branches", badge: null, featureKey: "multiBranch", visibleFor: ["ADMIN"] },
   { icon: Settings, label: "Settings", path: "/settings", badge: null },
 ];
 
 export const Sidebar = () => {
   const location = useLocation();
+  const { getUserRole } = useAuth();
+  const role = getUserRole();
+  const visibleMenuItems = menuItems.filter((item) => !item.visibleFor || item.visibleFor.includes(role));
+  const displayRole = role === "ADMIN" ? "Admin" : "User";
 
   return (
     <aside className="flex h-full w-72 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-modern-lg">
@@ -53,14 +59,14 @@ export const Sidebar = () => {
             alt="Admin avatar"
             className="w-28 h-28 rounded-full ring-2 ring-white/10 shadow-modern object-cover"
           />
-          <h2 className="text-xl font-semibold text-white leading-tight">Welcome, Admin</h2>
+          <h2 className="text-xl font-semibold text-white leading-tight">Welcome, {displayRole}</h2>
         </div>
       </div>
       
       {/* Modern Navigation */}
       <nav className="flex-1 overflow-y-auto py-6 px-4">
         <div className="space-y-2">
-          {menuItems.map((item) => {
+          {visibleMenuItems.map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
 
