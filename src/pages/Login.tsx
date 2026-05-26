@@ -18,6 +18,10 @@ import type { UserRole } from "@/hooks/useAuth"
 
 const LOGIN_API = "http://localhost:8080/api/security/login"
 const USER_DETAILS_API = "http://localhost:8080/api/security/user/details"
+const RESET_PASSWORD_API = "http://localhost:8080/api/security/reset-password"
+
+const MAX_USERNAME_LEN = 50
+const MAX_PASSWORD_LEN = 128
 
 const getRoleFromUser = (user: any): UserRole => {
   const normalizeRole = (role: unknown) =>
