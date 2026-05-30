@@ -58,8 +58,19 @@ export async function createCustomerMealInvoice(
 }
 
 export async function getAllCustomerMealInvoices(): Promise<CustomerMealInvoiceResponseDto[]> {
-  const res = await axiosClient.get<unknown[]>("/customer-meal-invoices")
-  return Array.isArray(res.data) ? res.data.map(normalizeInvoice) : []
+  try {
+    const res = await axiosClient.get<unknown[]>("/customer-meal-invoices")
+    return Array.isArray(res.data) ? res.data.map(normalizeInvoice) : []
+  } catch (err: unknown) {
+    // Backend throws INVALID_REQUEST when the table is empty instead of returning [].
+    // Treat any "not found" variant as an empty list.
+    const msg: string =
+      (err as { response?: { data?: { message?: string } } })?.response?.data?.message ?? ""
+    if (msg.toLowerCase().includes("not.found") || msg.toLowerCase().includes("not found")) {
+      return []
+    }
+    throw err
+  }
 }
 
 export async function getCustomerMealInvoiceById(invoiceId: number): Promise<CustomerMealInvoiceResponseDto> {
