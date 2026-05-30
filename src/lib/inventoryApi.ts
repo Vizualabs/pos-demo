@@ -6,8 +6,7 @@ export interface InventoryItemResponseDto {
   itemName: string
   quantity: number
   lowStockThreshold: number
-  /** LKR per kg (or per litre for liquids) — used for recipe cost. */
-  costPerUnit: number
+  costPerUnit: number | null
   updatedAt: string
   createdAt: string
 }
@@ -16,46 +15,60 @@ export interface InventoryItemRequestDto {
   itemName: string
   quantity: number
   lowStockThreshold: number
-  costPerUnit: number
+  costPerUnit?: number | null
 }
 
 export type InventoryItemPatchDto = Partial<InventoryItemRequestDto>
 
-function normalizeItem(raw: Partial<InventoryItemResponseDto> & { costPerUnit?: number }): InventoryItemResponseDto {
+/** Maps backend field name `cost` → frontend `costPerUnit`. */
+function normalizeItem(raw: Record<string, unknown>): InventoryItemResponseDto {
+  const cost = raw.cost
   return {
     itemId: Number(raw.itemId),
     itemName: String(raw.itemName ?? ""),
     quantity: Number(raw.quantity ?? 0),
     lowStockThreshold: Number(raw.lowStockThreshold ?? 0),
-    costPerUnit: typeof raw.costPerUnit === "number" && Number.isFinite(raw.costPerUnit) ? raw.costPerUnit : 120,
+    costPerUnit: typeof cost === "number" && Number.isFinite(cost) ? cost : null,
     createdAt: String(raw.createdAt ?? nowIso()),
     updatedAt: String(raw.updatedAt ?? nowIso()),
   }
 }
 
+/** Maps frontend `costPerUnit` → backend field name `cost`. */
+function toBackendBody(dto: InventoryItemRequestDto): Record<string, unknown> {
+  const { costPerUnit, ...rest } = dto
+  return { ...rest, cost: costPerUnit ?? null }
+}
+
+function toBackendPatch(patch: InventoryItemPatchDto): Record<string, unknown> {
+  if (!("costPerUnit" in patch)) return patch as Record<string, unknown>
+  const { costPerUnit, ...rest } = patch
+  return { ...rest, cost: costPerUnit ?? null }
+}
+
 export async function createInventoryItem(body: InventoryItemRequestDto): Promise<InventoryItemResponseDto> {
-  const res = await axiosClient.post<unknown>("/inventory", body)
-  return normalizeItem(res.data as Partial<InventoryItemResponseDto>)
+  const res = await axiosClient.post<unknown>("/inventory", toBackendBody(body))
+  return normalizeItem(res.data as Record<string, unknown>)
 }
 
 export async function getAllInventoryItems(): Promise<InventoryItemResponseDto[]> {
   const res = await axiosClient.get<unknown[]>("/inventory")
-  return Array.isArray(res.data) ? res.data.map((x) => normalizeItem(x as Partial<InventoryItemResponseDto>)) : []
+  return Array.isArray(res.data) ? res.data.map((x) => normalizeItem(x as Record<string, unknown>)) : []
 }
 
 export async function getInventoryItemById(itemId: number): Promise<InventoryItemResponseDto> {
   const res = await axiosClient.get<unknown>(`/inventory/${itemId}`)
-  return normalizeItem(res.data as Partial<InventoryItemResponseDto>)
+  return normalizeItem(res.data as Record<string, unknown>)
 }
 
 export async function updateInventoryItem(itemId: number, body: InventoryItemRequestDto): Promise<InventoryItemResponseDto> {
-  const res = await axiosClient.put<unknown>(`/inventory/${itemId}`, body)
-  return normalizeItem(res.data as Partial<InventoryItemResponseDto>)
+  const res = await axiosClient.put<unknown>(`/inventory/${itemId}`, toBackendBody(body))
+  return normalizeItem(res.data as Record<string, unknown>)
 }
 
 export async function patchInventoryItem(itemId: number, patch: InventoryItemPatchDto): Promise<InventoryItemResponseDto> {
-  const res = await axiosClient.patch<unknown>(`/inventory/${itemId}`, patch)
-  return normalizeItem(res.data as Partial<InventoryItemResponseDto>)
+  const res = await axiosClient.patch<unknown>(`/inventory/${itemId}`, toBackendPatch(patch))
+  return normalizeItem(res.data as Record<string, unknown>)
 }
 
 export async function deleteInventoryItem(itemId: number): Promise<void> {
@@ -66,5 +79,5 @@ export type InventoryUsageDeductionLine = { itemId: number; quantity: number }
 
 export async function applyInventoryUsageDeductions(lines: InventoryUsageDeductionLine[]): Promise<InventoryItemResponseDto[]> {
   const res = await axiosClient.post<unknown[]>("/inventory/deduct", { lines })
-  return Array.isArray(res.data) ? res.data.map((x) => normalizeItem(x as Partial<InventoryItemResponseDto>)) : []
+  return Array.isArray(res.data) ? res.data.map((x) => normalizeItem(x as Record<string, unknown>)) : []
 }
