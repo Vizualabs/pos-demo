@@ -26,7 +26,7 @@ export type OrderStatus = "NEW" | "PAID" | "CANCELLED" | "UPDATED"
 export type OrderType = "DINE_IN" | "TAKE_AWAY" | "DELIVERY"
 export type Kitchen = "KITCHEN_1" | "KITCHEN_2"
 
-export type PortionType = "MEDIUM" | "LARGE"
+export type PortionType = "SMALL" | "MEDIUM" | "LARGE"
 
 export type OrderItemRequestDto = {
   productId: number
@@ -67,7 +67,7 @@ export type OrderPatchDto = Partial<Omit<OrderRequestDto, "items">> & {
 
 function normalizePortionType(v: unknown): PortionType | null {
   const s = String(v ?? "").trim().toUpperCase()
-  if (s === "MEDIUM" || s === "LARGE") return s
+  if (s === "SMALL" || s === "MEDIUM" || s === "LARGE") return s
   return null
 }
 

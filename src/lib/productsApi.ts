@@ -2,7 +2,7 @@ import axiosClient from "@/axios"
 import { nowIso } from "@/lib/demoPersistence"
 import type { Kitchen } from "@/lib/ordersApi"
 
-export type PortionSize = "MEDIUM" | "LARGE"
+export type PortionSize = "SMALL" | "MEDIUM" | "LARGE"
 export type PortionPrices = Partial<Record<PortionSize, number>>
 
 export type ProductRecipeLineResponseDto = {
@@ -57,7 +57,7 @@ export type ProductRequestDto = {
   recipe: ProductRecipeLineRequestDto[]
   /** Omit from KOT print (still billed on receipt) */
   skipKitchenTicket?: boolean
-  /** Set on create only; must be unique. If omitted, next free id is used. */
+  /** Required on create — backend no longer auto-generates IDs. Must be unique and > 0. Omit on patch. */
   productId?: number
 }
 
@@ -86,7 +86,7 @@ function normalizePortionPrices(raw: unknown): PortionPrices {
   if (!raw || typeof raw !== "object") return {}
   const o = raw as Record<string, unknown>
   const out: PortionPrices = {}
-  for (const k of ["MEDIUM", "LARGE"] as const) {
+  for (const k of ["SMALL", "MEDIUM", "LARGE"] as const) {
     const v = o[k]
     const n = typeof v === "number" ? v : Number(v)
     if (Number.isFinite(n)) out[k] = n
@@ -191,15 +191,10 @@ function toBackendProductRequest(payload: ProductRequestDto, skipPortionPrices =
     isAvailable: payload.isAvailable,
     skipKitchenTicket: payload.skipKitchenTicket ?? false,
   }
-  // Backend PUT always INSERTs portion-price rows instead of UPDATEing existing
-  // ones, causing a unique-constraint violation when prices already exist.
-  // Callers omit these fields when portion pricing has not changed.
   if (!skipPortionPrices) {
     base.hasPortionPricing = payload.hasPortionPricing
     base.portionPrices = payload.portionPrices
   }
-  // Same INSERT-instead-of-UPDATE bug affects recipe items (uk_pri_product_item).
-  // Omit recipe fields when the recipe has not changed.
   if (!skipRecipe) {
     base.recipe = toBackendRecipeLines(payload.recipe)
     base.recipeLines = toBackendRecipeLines(payload.recipe)
@@ -253,8 +248,7 @@ export async function createProduct(payload: ProductRequestDto): Promise<Product
 }
 
 export async function updateProduct(productId: number, payload: ProductRequestDto, skipPortionPrices = false, skipRecipe = false): Promise<ProductResponseDto> {
-  // Many backends expect the ID both in the URL and the body for PUT.
-  const res = await axiosClient.put<unknown>(`/products/${productId}`, toBackendProductRequest({ ...payload, productId }, skipPortionPrices, skipRecipe))
+  const res = await axiosClient.patch<unknown>(`/products/${productId}`, toBackendProductRequest({ ...payload, productId }, skipPortionPrices, skipRecipe))
   const updated = normalizeProduct(res.data)
   return {
     ...updated,
