@@ -64,6 +64,7 @@ interface CartItem {
 }
 
 function kotPortionSi(c: CartItem): string | undefined {
+  if (c.portionSize === "SMALL") return "කුඩා"
   if (c.portionSize === "MEDIUM") return "මධ්‍යම"
   if (c.portionSize === "LARGE") return "විශාල"
   if (c.hasPortionPricing) return "කුඩා"
@@ -132,6 +133,7 @@ function buildInventoryUsageFromCart(
 }
 
 function billPortionLabelForCart(c: CartItem): string | undefined {
+  if (c.portionSize === "SMALL") return "Small"
   if (c.portionSize === "MEDIUM") return "Medium"
   if (c.portionSize === "LARGE") return "Large"
   if (c.hasPortionPricing) return "Small"
@@ -395,7 +397,7 @@ const POS = () => {
     const items = cart.map((c) => ({
       productId: c.productId,
       quantity: c.quantity,
-      portionType: c.portionSize ?? null,
+      portionType: null,
     }))
 
     let tableNumber: number | null = null
@@ -639,9 +641,20 @@ const POS = () => {
               {pendingAdd.product.hasPortionPricing ? (
                 <div className="grid gap-2">
                   <label className="text-sm font-medium text-muted-foreground">
-                    Portion size (optional — default Small)
+                    Portion size
                   </label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      type="button"
+                      variant={draftPortion === "SMALL" ? "default" : "outline"}
+                      className="h-auto min-h-11 flex-col gap-0.5 py-2"
+                      onClick={() => setDraftPortion("SMALL")}
+                    >
+                      <span className="text-sm font-semibold">Small</span>
+                      <span className="text-xs font-mono opacity-90">
+                        {formatCurrency(pendingAdd.product.portionPrices?.SMALL ?? pendingAdd.product.sellingPrice)}
+                      </span>
+                    </Button>
                     <Button
                       type="button"
                       variant={draftPortion === "MEDIUM" ? "default" : "outline"}
@@ -666,8 +679,7 @@ const POS = () => {
                     </Button>
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    If you skip Medium/Large, this line is added at the Small price (
-                    {formatCurrency(pendingAdd.product.sellingPrice)}).
+                    Select a portion. If none selected, defaults to Small ({formatCurrency(pendingAdd.product.portionPrices?.SMALL ?? pendingAdd.product.sellingPrice)}).
                   </p>
                 </div>
               ) : null}

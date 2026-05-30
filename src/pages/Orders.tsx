@@ -108,11 +108,13 @@ const orderTypeLabelSi: Record<OrderType, string> = {
 }
 
 function portionLabelForBill(p: PortionType | null | undefined): string | undefined {
+  if (p === "SMALL") return "Small"
   if (p === "MEDIUM") return "Medium"
   if (p === "LARGE") return "Large"
   return undefined
 }
 function portionLabelSi(p: PortionType | null | undefined): string | undefined {
+  if (p === "SMALL") return "කුඩා"
   if (p === "MEDIUM") return "මධ්‍යම"
   if (p === "LARGE") return "විශාල"
   return undefined

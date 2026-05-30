@@ -323,7 +323,7 @@ const MenuItems = () => {
         setIsSaving(false)
         return
       }
-      portionPrices = { MEDIUM: medium, LARGE: large }
+      portionPrices = { SMALL: basePrice, MEDIUM: medium, LARGE: large }
     }
 
     // Build recipe payload (kg) — showcase items never use recipe
@@ -387,7 +387,8 @@ const MenuItems = () => {
         const portionPricingChanged = prevHasPortionPricing !== nextHasPortionPricing
         const portionPricesChanged =
           nextHasPortionPricing &&
-          (existingProduct.portionPrices?.MEDIUM !== payload.portionPrices?.MEDIUM ||
+          (existingProduct.portionPrices?.SMALL !== payload.portionPrices?.SMALL ||
+            existingProduct.portionPrices?.MEDIUM !== payload.portionPrices?.MEDIUM ||
             existingProduct.portionPrices?.LARGE !== payload.portionPrices?.LARGE)
         const shouldSendPortionPricing = portionPricingChanged || portionPricesChanged
 
