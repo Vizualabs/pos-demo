@@ -1,6 +1,6 @@
 import axiosClient from "@/axios"
 
-export type PortionType = "MEDIUM" | "LARGE"
+export type PortionType = "SMALL" | "MEDIUM" | "LARGE"
 
 export type OrderItemRequestDto = {
   orderId: number
@@ -25,7 +25,7 @@ export type OrderItemPatchDto = Partial<
 
 function normalizePortionType(v: unknown): PortionType | null {
   const s = String(v ?? "").trim().toUpperCase()
-  if (s === "MEDIUM" || s === "LARGE") return s
+  if (s === "SMALL" || s === "MEDIUM" || s === "LARGE") return s
   return null
 }
 
