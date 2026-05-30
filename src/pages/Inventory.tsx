@@ -96,14 +96,15 @@ const Inventory = () => {
     const itemName = body.itemName.trim()
     const quantity = Number(body.quantity)
     const lowStockThreshold = Number(body.lowStockThreshold)
-    const costPerUnit = Number(body.costPerUnit)
+    const costStr = body.costPerUnit.trim()
+    const costPerUnit: number | null = costStr === "" ? null : Number(costStr)
 
     if (!itemName) return { ok: false as const, message: "Item name is required" }
     if (!Number.isFinite(quantity) || quantity < 0) return { ok: false as const, message: "Quantity must be 0 or more" }
     if (!Number.isFinite(lowStockThreshold) || lowStockThreshold < 0)
       return { ok: false as const, message: "Low stock threshold must be 0 or more" }
-    if (!Number.isFinite(costPerUnit) || costPerUnit < 0)
-      return { ok: false as const, message: "Cost per unit (LKR) must be 0 or more" }
+    if (costPerUnit !== null && (!Number.isFinite(costPerUnit) || costPerUnit < 0))
+      return { ok: false as const, message: "Cost (LKR) must be 0 or more" }
     if (lowStockThreshold > quantity)
       return { ok: false as const, message: "Low stock threshold cannot be greater than quantity" }
 
@@ -135,7 +136,7 @@ const Inventory = () => {
       itemName: item.itemName,
       quantity: String(item.quantity),
       lowStockThreshold: String(item.lowStockThreshold),
-      costPerUnit: String(item.costPerUnit ?? 0),
+      costPerUnit: item.costPerUnit != null ? String(item.costPerUnit) : "",
     })
     setEditOpen(true)
   }
