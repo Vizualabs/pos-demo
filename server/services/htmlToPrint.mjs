@@ -9,7 +9,10 @@ const PRINT_WIDTH_PX = Number(process.env.PRINT_WIDTH_DOTS) || 576
 const RENDER_WIDTH_PX = Number(process.env.PRINT_RENDER_WIDTH) || 432
 const RASTER_SCALE = Number(process.env.PRINT_RASTER_SCALE) || PRINT_WIDTH_PX / RENDER_WIDTH_PX
 
-function buildRasterFontOverrides() {
+/** Cashier bill scale on thermal (1.33 = full roll width; lower = smaller). */
+const CUSTOMER_RASTER_SCALE = Number(process.env.CUSTOMER_RASTER_SCALE) || 1.33
+
+function buildKotRasterOverrides() {
   return `
   html, body {
     width: ${RENDER_WIDTH_PX}px !important;
@@ -62,10 +65,40 @@ function buildRasterFontOverrides() {
     font-weight: 900 !important;
   }
   .prep-note { font-size: 18px !important; font-weight: 600 !important; }
-  .c-brand-name { font-size: 30px !important; font-weight: 900 !important; }
-  .customer-print-section table { font-size: 22px !important; }
-  .grand-row { font-size: 30px !important; font-weight: 900 !important; }
 `
+}
+
+/** Cashier bill — larger type for XPrinter 80mm (readable from arm’s length). */
+function buildCustomerRasterOverrides() {
+  return `
+  html, body {
+    width: ${RENDER_WIDTH_PX}px !important;
+    max-width: ${RENDER_WIDTH_PX}px !important;
+    margin: 0 !important;
+    padding: 6px 8px !important;
+    font-family: "Courier New", Courier, monospace !important;
+    font-size: 20px !important;
+    line-height: 1.35 !important;
+    font-weight: 700 !important;
+  }
+  .customer-print-section { width: 100% !important; max-width: 100% !important; }
+  .c-shop-name { font-size: 26px !important; font-weight: 800 !important; }
+  .c-accent-bar { height: 4px !important; width: 56px !important; }
+  .c-row, .c-sum-row, .c-count-row { font-size: 16px !important; }
+  .c-inline { font-size: 16px !important; }
+  .c-col-head { font-size: 14px !important; }
+  .c-item-name { font-size: 18px !important; font-weight: 800 !important; }
+  .c-item-sub { font-size: 16px !important; }
+  .c-item-amt { font-size: 18px !important; font-weight: 800 !important; }
+  .c-sum-net { font-size: 20px !important; font-weight: 900 !important; }
+  .c-payment-box { border-width: 2px !important; }
+  .c-thanks { font-size: 18px !important; }
+  .c-credit { font-size: 14px !important; }
+`
+}
+
+function buildRasterFontOverrides(isCustomerBill) {
+  return isCustomerBill ? buildCustomerRasterOverrides() : buildKotRasterOverrides()
 }
 
 let browserPromise = null
@@ -80,11 +113,12 @@ async function getBrowser() {
   return browserPromise
 }
 
-/** Scale PNG to printer dot width (enlarges kitchen ticket text on XPrinter POS-80). */
-async function scaleToPrintWidth(pngBuffer) {
+/** @param {Buffer} pngBuffer @param {{ customerBill?: boolean }} [opts] */
+async function scaleToPrintWidth(pngBuffer, opts = {}) {
   const meta = await sharp(pngBuffer).metadata()
   const srcW = meta.width ?? RENDER_WIDTH_PX
-  const targetW = Math.round(Math.min(PRINT_WIDTH_PX, srcW * RASTER_SCALE))
+  const scale = opts.customerBill ? CUSTOMER_RASTER_SCALE : RASTER_SCALE
+  const targetW = Math.round(Math.min(PRINT_WIDTH_PX, srcW * scale))
   if (targetW <= srcW) {
     return sharp(pngBuffer)
       .resize(PRINT_WIDTH_PX, null, { fit: "contain", background: "#ffffff" })
@@ -102,9 +136,9 @@ async function scaleToPrintWidth(pngBuffer) {
     .toBuffer()
 }
 
-/** @param {Buffer} pngBuffer */
-async function pngToEscPosRaster(pngBuffer) {
-  const scaled = await scaleToPrintWidth(pngBuffer)
+/** @param {Buffer} pngBuffer @param {{ customerBill?: boolean }} [opts] */
+async function pngToEscPosRaster(pngBuffer, opts = {}) {
+  const scaled = await scaleToPrintWidth(pngBuffer, opts)
 
   const { data, info } = await sharp(scaled)
     .flatten({ background: "#ffffff" })
@@ -148,6 +182,7 @@ async function pngToEscPosRaster(pngBuffer) {
  * @param {string} html Full HTML document from receiptPrint.ts
  */
 export async function htmlToEscPosBuffer(html) {
+  const isCustomerBill = html.includes("customer-print-section")
   const browser = await getBrowser()
   const page = await browser.newPage()
   try {
@@ -162,7 +197,7 @@ export async function htmlToEscPosBuffer(html) {
       }
     })
     await page.setContent(html, { waitUntil: "load", timeout: 30_000 })
-    await page.addStyleTag({ content: buildRasterFontOverrides() })
+    await page.addStyleTag({ content: buildRasterFontOverrides(isCustomerBill) })
     await page.evaluate(() => document.fonts?.ready)
     const target =
       (await page.$(".kot-single")) ??
@@ -185,7 +220,7 @@ export async function htmlToEscPosBuffer(html) {
       },
       omitBackground: false,
     })
-    return pngToEscPosRaster(Buffer.from(png))
+    return pngToEscPosRaster(Buffer.from(png), { customerBill: isCustomerBill })
   } finally {
     await page.close()
   }

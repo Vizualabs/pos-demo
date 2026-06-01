@@ -1,6 +1,6 @@
 {
-  "customerPrinterIp": "192.168.8.201",
-  "kitchen1PrinterIp": "192.168.8.201",
-  "kitchen2PrinterIp": "192.168.8.201",
+  "customerPrinterIp": "192.168.1.210",
+  "kitchen1PrinterIp": "192.168.1.200",
+  "kitchen2PrinterIp": "192.168.1.200",
   "printerPort": 9100
 }

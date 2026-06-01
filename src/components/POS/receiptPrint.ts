@@ -1,4 +1,3 @@
-import { formatCurrency } from "@/lib/utils"
 import type { Kitchen } from "@/lib/ordersApi"
 import {
   customerPrinterIp,
@@ -69,23 +68,60 @@ const kotLabels = {
   prepNote: "මෙම පත්‍රිකාව ආහාර පිළියෙළ කිරීම සඳහා පමණි.",
 }
 
-/** Labels for customer receipt preview dialog (shared with printed HTML). */
+/** Labels + branding for customer receipt (print + preview). */
 export const customerReceiptDialogLabels = {
-  restaurant: "Restaurant",
+  restaurant: "Madhara Restaurant",
+  thanks: "THANK YOU COME AGAIN !!!",
+  softwareCredit: "Software by VIZUALABS | www.vizualabs.com",
+  invoice: "Invoice",
+  dateTime: "Date & Time",
+  staff: "Staff",
+  customer: "Customer",
+  description: "DESCRIPTION",
+  price: "PRICE",
+  qty: "QTY",
+  amount: "AMOUNT",
+  subTotal: "SUB TOTAL",
+  discount: "DISCOUNT",
+  netTotal: "NET TOTAL",
+  paidAmount: "PAID AMOUNT",
+  balance: "BALANCE",
+  dueAmount: "DUE AMOUNT",
+  noOfItems: "No of Items",
+  noOfPcs: "No of Pcs",
+  payment: "Payment",
+  tax: "Tax (10%)",
+  /** Legacy — unused by new layout */
   receipt: "Customer receipt",
   date: "Date",
   orderNo: "Order #",
   table: "Table",
   orderType: "Order type",
-  payment: "Payment",
   item: "Item",
-  qty: "Qty",
   unit: "Unit",
-  amount: "Amount",
   sub: "Subtotal",
-  tax: "Tax (10%)",
   grand: "Total",
-  thanks: "Thank you — please visit again.",
+}
+
+/** Plain amount for thermal receipt lines (no LKR prefix). */
+export function formatReceiptAmount(amount: number): string {
+  return amount.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function receiptHr(thin = false): string {
+  return `<div class="c-hr${thin ? " c-hr-thin" : ""}"></div>`
+}
+
+function formatReceiptDateTime(d: Date): { date: string; time: string } {
+  return {
+    date: d.toLocaleDateString("en-CA"),
+    time: d.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }),
+  }
 }
 
 function kotLineDisplay(line: KitchenTicketLine) {
@@ -114,57 +150,90 @@ function lineDisplayName(line: ReceiptLine): string {
   return line.portion ? `${line.name} (${line.portion})` : line.name
 }
 
-/** Build bill HTML from data so print does not rely on portaled dialog DOM (fixes empty / failed print). */
-function buildCustomerBillHtml(customer: CustomerBillPayload, d: Date): string {
-  const rows = customer.lines
+/** Classic 80mm thermal receipt — same layout as preview, black only. */
+export function buildCustomerBillBodyHtml(customer: CustomerBillPayload, d: Date): string {
+  const L = customerReceiptDialogLabels
+  const { date, time } = formatReceiptDateTime(d)
+  const itemCount = customer.lines.length
+  const pieceCount = customer.lines.reduce((s, line) => s + line.qty, 0)
+  const customerLabel = [customer.tableLabel, customer.orderTypeLabel].filter(Boolean).join(" · ") || "WALK-IN"
+  const pending = customer.paymentLabel.toLowerCase().includes("pending")
+  const paidAmount = pending ? 0 : customer.total
+  const dueAmount = pending ? customer.total : 0
+
+  const itemRows = customer.lines
     .map(
-      (line) => `<tr>
-      <td class="c-item">${escapeHtml(lineDisplayName(line))}</td>
-      <td class="c-qty">${line.qty}</td>
-      <td class="c-money">${formatCurrency(line.unitPrice)}</td>
-      <td class="c-money c-strong">${formatCurrency(line.lineTotal)}</td>
-    </tr>`,
+      (line) => `<div class="c-item-row">
+      <div class="c-item-main">
+        <div class="c-item-name">${escapeHtml(lineDisplayName(line))}</div>
+        <div class="c-item-sub">${formatReceiptAmount(line.unitPrice)} × ${line.qty}</div>
+      </div>
+      <div class="c-item-amt">${formatReceiptAmount(line.lineTotal)}</div>
+    </div>`,
     )
     .join("")
-  const paymentRow = customer.paymentLabel.trim()
-    ? `<div class="meta-row"><span class="meta-k">${customerReceiptDialogLabels.payment}</span><span class="meta-v">${escapeHtml(customer.paymentLabel)}</span></div>`
+
+  const taxRow =
+    customer.taxAmount > 0
+      ? `<div class="c-sum-row"><span>${L.tax}</span><span>${formatReceiptAmount(customer.taxAmount)}</span></div>`
+      : ""
+
+  const paymentBlock = customer.paymentLabel.trim()
+    ? `${receiptHr()}
+    <div class="c-payment-box">
+      <div class="c-sum-row"><span>${L.paidAmount}</span><span>${formatReceiptAmount(paidAmount)}</span></div>
+      <div class="c-sum-row"><span>${L.balance}</span><span>${formatReceiptAmount(0)}</span></div>
+      <div class="c-sum-row c-sum-due"><span>${L.dueAmount}</span><span>${formatReceiptAmount(dueAmount)}</span></div>
+    </div>`
     : ""
+
   return `<div class="customer-print-section">
-    <div class="c-header">
-      <div class="c-brand">
-        <div class="c-brand-name">${customerReceiptDialogLabels.restaurant}</div>
-        <div class="c-brand-sub">${customerReceiptDialogLabels.receipt}</div>
-      </div>
-      <div class="c-rule"></div>
-      <div class="meta">
-        <div class="meta-row"><span class="meta-k">${customerReceiptDialogLabels.date}</span><span class="meta-v">${escapeHtml(d.toLocaleString())}</span></div>
-        <div class="meta-row"><span class="meta-k">${customerReceiptDialogLabels.orderNo}</span><span class="meta-v mono">#${customer.orderId}</span></div>
-        <div class="meta-row"><span class="meta-k">${customerReceiptDialogLabels.table}</span><span class="meta-v">${escapeHtml(customer.tableLabel)}</span></div>
-        <div class="meta-row"><span class="meta-k">${customerReceiptDialogLabels.orderType}</span><span class="meta-v">${escapeHtml(customer.orderTypeLabel)}</span></div>
-        ${paymentRow}
-      </div>
+    <div class="c-header-block">
+      <h1 class="c-shop-name">${escapeHtml(L.restaurant.toUpperCase())}</h1>
+      <div class="c-accent-bar"></div>
     </div>
-    <table>
-      <thead><tr>
-        <th>${customerReceiptDialogLabels.item}</th>
-        <th style="width:2.5rem;text-align:center">${customerReceiptDialogLabels.qty}</th>
-        <th style="text-align:right">${customerReceiptDialogLabels.unit}</th>
-        <th style="text-align:right">${customerReceiptDialogLabels.amount}</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div class="totals">
+    ${receiptHr()}
+    <div class="c-meta-block">
+      <div class="c-row"><span class="c-label">${L.invoice}</span><span class="c-val">${customer.orderId}</span></div>
+      <div class="c-row"><span class="c-label">${L.dateTime}</span><span class="c-val c-mono">${escapeHtml(date)} • ${escapeHtml(time)}</span></div>
+      <div class="c-row"><span class="c-label">${L.staff}</span><span class="c-val">POS</span></div>
+    </div>
+    ${receiptHr()}
+    <div class="c-customer-block">
+      <div class="c-inline"><span class="c-label">${L.customer}:</span> <span class="c-val">${escapeHtml(customerLabel)}</span></div>
       ${
-        customer.taxAmount > 0
-          ? `<div class="total-row"><span>${customerReceiptDialogLabels.sub}</span><span>${formatCurrency(customer.subtotal)}</span></div>
-      <div class="total-row"><span>${customerReceiptDialogLabels.tax}</span><span>${formatCurrency(customer.taxAmount)}</span></div>
-      <div class="grand-row"><span>${customerReceiptDialogLabels.grand}</span><span>${formatCurrency(customer.total)}</span></div>`
-          : `<div class="grand-row"><span>${customerReceiptDialogLabels.grand}</span><span>${formatCurrency(customer.total)}</span></div>`
+        customer.paymentLabel.trim()
+          ? `<div class="c-inline"><span class="c-label">${L.payment}:</span> <span class="c-val">${escapeHtml(customer.paymentLabel)}</span></div>`
+          : ""
       }
     </div>
-    <div class="c-rule dotted"></div>
-    <p class="c-footer">${customerReceiptDialogLabels.thanks}</p>
+    ${receiptHr()}
+    <div class="c-col-head">
+      <span>${L.description}</span>
+      <span class="c-col-qty">${L.qty}</span>
+      <span class="c-col-amt">${L.amount}</span>
+    </div>
+    <div class="c-items">${itemRows}</div>
+    ${receiptHr()}
+    <div class="c-sum-block">
+      <div class="c-sum-row"><span>${L.subTotal}</span><span>${formatReceiptAmount(customer.subtotal)}</span></div>
+      ${taxRow}
+      <div class="c-sum-row c-sum-net"><span>${L.netTotal}</span><span>${formatReceiptAmount(customer.total)}</span></div>
+    </div>
+    ${paymentBlock}
+    ${receiptHr()}
+    <div class="c-count-row">
+      <span>${L.noOfItems}: <strong>${itemCount}</strong></span>
+      <span>${L.noOfPcs}: <strong>${pieceCount.toFixed(1)}</strong></span>
+    </div>
+    ${receiptHr()}
+    <p class="c-thanks">✦ ${L.thanks} ✦</p>
+    <p class="c-credit">${escapeHtml(L.softwareCredit)}</p>
   </div>`
+}
+
+function buildCustomerBillHtml(customer: CustomerBillPayload, d: Date): string {
+  return buildCustomerBillBodyHtml(customer, d)
 }
 
 /** Matches index.css — embedded in print popup so styles apply without Tailwind */
@@ -263,35 +332,142 @@ const THERMAL_BASE_STYLES = `
       }
 `
 
+/** Print + on-screen preview — black thermal layout (matches printed bill). */
+export const CUSTOMER_BILL_PRINT_STYLES = `
+      .customer-print-section {
+        color: #000;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        max-width: 68mm;
+        margin: 0 auto;
+        padding: 4px 2px;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      .c-header-block { text-align: center; padding: 8px 0 10px; }
+      .c-shop-name {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        margin: 0 0 8px;
+        line-height: 1.15;
+      }
+      .c-accent-bar {
+        width: 48px;
+        height: 3px;
+        background: #000;
+        margin: 0 auto;
+      }
+      .c-hr {
+        border: none;
+        border-top: 2px solid #000;
+        margin: 10px 0;
+        height: 0;
+      }
+      .c-meta-block, .c-customer-block, .c-sum-block, .c-payment-box {
+        margin: 4px 0;
+      }
+      .c-row, .c-sum-row, .c-count-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 8px;
+        margin: 4px 0;
+      }
+      .c-label { color: #000; font-weight: 500; }
+      .c-val { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+      .c-mono { font-family: ui-monospace, monospace; font-size: 0.92em; }
+      .c-inline { margin: 4px 0; line-height: 1.45; }
+      .c-inline .c-label { font-weight: 500; }
+      .c-inline .c-val { font-weight: 700; }
+      .c-col-head {
+        display: grid;
+        grid-template-columns: 1fr 2.2rem 4.5rem;
+        gap: 6px;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin: 8px 0 6px;
+        color: #000;
+      }
+      .c-col-qty { text-align: center; }
+      .c-col-amt { text-align: right; }
+      .c-items { margin: 6px 0; }
+      .c-item-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 8px;
+        margin: 10px 0;
+      }
+      .c-item-main { flex: 1; min-width: 0; }
+      .c-item-name {
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.25;
+        margin-bottom: 2px;
+        word-break: break-word;
+      }
+      .c-item-sub {
+        font-size: 12px;
+        font-weight: 500;
+        color: #000;
+        font-variant-numeric: tabular-nums;
+      }
+      .c-item-amt {
+        font-size: 14px;
+        font-weight: 800;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .c-sum-block { margin-top: 4px; }
+      .c-sum-row span:last-child { font-weight: 700; }
+      .c-sum-net {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 2px solid #000;
+        font-size: 15px;
+        font-weight: 800;
+      }
+      .c-sum-net span:last-child { font-weight: 900; }
+      .c-payment-box {
+        border: 2px solid #000;
+        padding: 8px 10px;
+        margin: 8px 0;
+      }
+      .c-sum-due span:last-child { font-weight: 900; }
+      .c-count-row {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .c-count-row strong { font-weight: 800; }
+      .c-thanks {
+        text-align: center;
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin: 10px 0 6px;
+      }
+      .c-credit {
+        text-align: center;
+        font-size: 10px;
+        font-weight: 500;
+        font-style: italic;
+        margin: 0;
+        color: #000;
+      }
+`
+
 function buildPrintDocumentHtmlCustomerOnly(customerHtml: string): string {
   return `<!DOCTYPE html><html><head>
     <meta charset="utf-8" />
     <title>Customer bill</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
       ${THERMAL_BASE_STYLES}
-      .customer-print-section { color: #111; }
-      .c-brand { text-align: center; }
-      .c-brand-name { font-weight: 800; font-size: 14px; letter-spacing: 0.2px; margin: 0; }
-      .c-brand-sub { font-size: 10px; color: #666; margin-top: 2px; }
-      .c-rule { height: 1px; background: #e9e9e9; margin: 8px auto; max-width: 66mm; }
-      .c-rule.dotted { background: none; border-top: 1px dashed #8c8c8c; height: 0; margin: 10px auto 8px; max-width: 66mm; }
-      .meta { font-size: 10px; max-width: 66mm; margin: 0 auto; }
-      .meta-row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
-      .meta-k { color: #555; }
-      .meta-v { text-align: right; font-weight: 600; }
-      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; }
-      .customer-print-section table { width: 100%; border-collapse: collapse; font-size: 10px; margin: 10px auto 0; }
-      .customer-print-section thead th { font-weight: 700; color: #333; padding: 6px 0 5px; border-bottom: 1px solid #dcdcdc; }
-      .customer-print-section tbody td { padding: 7px 0; border-bottom: 1px solid #efefef; vertical-align: top; }
-      .c-item { padding-right: 6px; }
-      .c-qty { width: 2.5rem; text-align: center; font-weight: 700; }
-      .c-money { text-align: right; white-space: nowrap; }
-      .c-strong { font-weight: 800; }
-      .totals { margin: 10px auto 0; padding-top: 8px; border-top: 1px solid #dcdcdc; font-size: 11px; max-width: 66mm; }
-      .total-row { display: flex; justify-content: space-between; padding: 2px 0; color: #333; }
-      .grand-row { display: flex; justify-content: space-between; padding-top: 6px; font-size: 14px; font-weight: 900; }
-      .c-footer { text-align: center; font-size: 10px; color: #666; margin: 0; }
+      ${CUSTOMER_BILL_PRINT_STYLES}
+      body { font-size: 13px; color: #000; }
     </style>
   </head><body>${customerHtml}</body></html>`
 }

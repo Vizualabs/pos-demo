@@ -3,9 +3,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import Login from "./pages/Login";
 import { ProtectedRoute } from "./components/Auth/ProtectedRoute";
-import { isSkipLoginEnabled } from "./config/devAuth";
+import { RootRedirect } from "./components/Auth/RootRedirect";
+import { LoginRoute } from "./components/Auth/LoginRoute";
 import Dashboard from "./pages/Dashboard";
 import POS from "./pages/POS";
 import QRMenu from "./pages/QRMenu";
@@ -29,8 +29,8 @@ const App = () => (
       <Sonner />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
-          <Route path="/" element={<Navigate to="/pos" replace />} />
-          <Route path="/login" element={isSkipLoginEnabled() ? <Navigate to="/pos" replace /> : <Login />} />
+          <Route path="/" element={<RootRedirect />} />
+          <Route path="/login" element={<LoginRoute />} />
 
           <Route
             path="/dashboard"
