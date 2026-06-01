@@ -1,4 +1,6 @@
 import axiosClient from "@/axios"
+import { isDemoDataEnabled } from "@/config/demoMode"
+import { demoGetAllProducts } from "@/lib/demoPosStore"
 import { nowIso } from "@/lib/demoPersistence"
 import type { Kitchen } from "@/lib/ordersApi"
 
@@ -226,6 +228,8 @@ function toBackendProductPatch(patch: ProductPatchDto): Record<string, unknown> 
 }
 
 export async function getAllProducts(): Promise<ProductResponseDto[]> {
+  if (isDemoDataEnabled()) return demoGetAllProducts()
+
   const res = await axiosClient.get<unknown[]>("/products")
   return Array.isArray(res.data) ? res.data.map(normalizeProduct) : []
 }

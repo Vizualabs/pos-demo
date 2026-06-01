@@ -1,4 +1,10 @@
 import axiosClient from "@/axios"
+import { isDemoDataEnabled } from "@/config/demoMode"
+import {
+  demoCreateOrderItem,
+  demoDeleteOrderItem,
+  demoGetAllOrderItems,
+} from "@/lib/demoPosStore"
 
 export type PortionType = "SMALL" | "MEDIUM" | "LARGE"
 
@@ -61,11 +67,15 @@ function unwrapList(data: unknown): unknown[] {
 }
 
 export async function createOrderItem(payload: OrderItemRequestDto): Promise<OrderItemResponseDto> {
+  if (isDemoDataEnabled()) return demoCreateOrderItem(payload)
+
   const res = await axiosClient.post<unknown>("/order-items", payload)
   return normalizeOrderItem(res.data)
 }
 
 export async function getAllOrderItems(): Promise<OrderItemResponseDto[]> {
+  if (isDemoDataEnabled()) return demoGetAllOrderItems()
+
   const res = await axiosClient.get<unknown>("/order-items")
   return unwrapList(res.data).map(normalizeOrderItem).filter((i) => Number.isFinite(i.orderItemId))
 }
@@ -86,5 +96,10 @@ export async function patchOrderItem(orderItemId: number, patch: OrderItemPatchD
 }
 
 export async function deleteOrderItem(orderItemId: number): Promise<void> {
+  if (isDemoDataEnabled()) {
+    demoDeleteOrderItem(orderItemId)
+    return
+  }
+
   await axiosClient.delete(`/order-items/${orderItemId}`)
 }

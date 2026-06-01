@@ -37,10 +37,12 @@ import {
 import { toast } from "sonner"
 import {
   loadPrintPrinterConfig,
+  mergePrintPrinterConfig,
   savePrintPrinterConfig,
   type PrintBackend,
   type PrintPrinterConfig,
 } from "@/lib/printConfig"
+import { fetchPrintSettings, savePrintSettingsToServer } from "@/lib/serverPrint"
 
 const Settings = () => {
   const navigate = useNavigate()
@@ -72,6 +74,22 @@ const Settings = () => {
   })
   const [passwordLoading, setPasswordLoading] = useState(false)
   const [passwordError, setPasswordError] = useState<string | null>(null)
+
+  useEffect(() => {
+    void fetchPrintSettings()
+      .then((remote) => {
+        const next = mergePrintPrinterConfig({
+          customerPrinterIp: remote.customerPrinterIp,
+          kitchen1PrinterIp: remote.kitchen1PrinterIp,
+          kitchen2PrinterIp: remote.kitchen2PrinterIp,
+          printerPort: remote.printerPort,
+        })
+        setPrintCfg(next)
+      })
+      .catch(() => {
+        /* print server offline — use localStorage */
+      })
+  }, [])
 
   useEffect(() => {
     try {
@@ -339,11 +357,10 @@ const Settings = () => {
                       Receipt printers (80mm thermal)
                     </CardTitle>
                     <p className="text-sm text-muted-foreground font-normal">
-                      For <span className="font-medium text-foreground">network / thermal printers</span> without the
-                      Chrome print dialog, use <span className="font-medium text-foreground">QZ Tray</span> (install on
-                      this PC, add printers in Windows) or run the optional{" "}
-                      <span className="font-medium text-foreground">print-agent</span> service and choose HTTP below.
-                      Printer names must match Windows exactly (Control Panel → Printers).
+                      <span className="font-medium text-foreground">Kitchen printers</span> — LAN/WiFi (cloud server
+                      prints silently). <span className="font-medium text-foreground">Cashier bill</span> — USB on this
+                      PC (one browser print dialog) or LAN like kitchen. No extra software install. See{" "}
+                      <code className="text-foreground">docs/PRINT_NETWORK_SETUP.md</code>.
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -357,66 +374,74 @@ const Settings = () => {
                           <SelectValue placeholder="Choose method" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="browser">Browser print dialog (Chrome / Edge)</SelectItem>
-                          <SelectItem value="qz">QZ Tray — silent to named printers</SelectItem>
-                          <SelectItem value="http">Local print agent (HTTP)</SelectItem>
+                          <SelectItem value="server">Cloud server — silent network print (recommended)</SelectItem>
+                          <SelectItem value="browser">Browser print dialog (dev / testing only)</SelectItem>
                         </SelectContent>
                       </Select>
-                      {printCfg.printBackend === "qz" ? (
-                        <p className="text-xs text-muted-foreground">
-                          Download QZ Tray from qz.io, install, then approve this site when prompted. Use the exact
-                          printer name from Windows for each slot below.
+                      {printCfg.printBackend === "browser" ? (
+                        <p className="text-xs text-amber-700 dark:text-amber-400">
+                          Browser mode shows a print dialog for each ticket. Not suitable for production multi-printer
+                          setups.
                         </p>
-                      ) : null}
-                      {printCfg.printBackend === "http" ? (
-                        <p className="text-xs text-muted-foreground">
-                          Run <code className="text-foreground">npm install</code> and{" "}
-                          <code className="text-foreground">npm start</code> in the <code className="text-foreground">print-agent</code>{" "}
-                          folder (Windows). Set the agent URL below (e.g. http://127.0.0.1:9101).
+                      ) : (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Order: kitchen 1 → kitchen 2 → cashier bill. All printers use LAN IP (port 9100).
                         </p>
-                      ) : null}
+                      )}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <Label htmlFor="print-customer">Customer bill printer</Label>
-                        <Input
-                          id="print-customer"
-                          value={printCfg.customerPrinterName}
-                          onChange={(e) => setPrintCfg((p) => ({ ...p, customerPrinterName: e.target.value }))}
-                          placeholder="e.g. EPSON TM-T20III Receipt"
-                          className="mt-1"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="print-k1">Kitchen 1 printer</Label>
+                        <Label htmlFor="print-k1">Kitchen 1 printer IP</Label>
                         <Input
                           id="print-k1"
-                          value={printCfg.kitchen1PrinterName}
-                          onChange={(e) => setPrintCfg((p) => ({ ...p, kitchen1PrinterName: e.target.value }))}
-                          placeholder="Kitchen 1 station"
+                          value={printCfg.kitchen1PrinterIp}
+                          onChange={(e) => setPrintCfg((p) => ({ ...p, kitchen1PrinterIp: e.target.value }))}
+                          placeholder="e.g. 192.168.8.200"
                           className="mt-1"
                         />
                       </div>
                       <div>
-                        <Label htmlFor="print-k2">Kitchen 2 printer</Label>
+                        <Label htmlFor="print-k2">Kitchen 2 printer IP</Label>
                         <Input
                           id="print-k2"
-                          value={printCfg.kitchen2PrinterName}
-                          onChange={(e) => setPrintCfg((p) => ({ ...p, kitchen2PrinterName: e.target.value }))}
-                          placeholder="Kitchen 2 station"
+                          value={printCfg.kitchen2PrinterIp}
+                          onChange={(e) => setPrintCfg((p) => ({ ...p, kitchen2PrinterIp: e.target.value }))}
+                          placeholder="e.g. 192.168.8.201"
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="print-customer">Cashier / customer bill IP</Label>
+                        <Input
+                          id="print-customer"
+                          value={printCfg.customerPrinterIp}
+                          onChange={(e) => setPrintCfg((p) => ({ ...p, customerPrinterIp: e.target.value }))}
+                          placeholder="e.g. 192.168.8.202"
                           className="mt-1"
                         />
                       </div>
                     </div>
-                    <div>
-                      <Label htmlFor="print-agent">Print agent URL (HTTP mode only)</Label>
+                    <p className="text-xs text-muted-foreground max-w-2xl">
+                      Each XPrinter (or similar) needs a static IP on the same network as the print server. Raw TCP port
+                      9100 must be open. Test from the server PC:{" "}
+                      <code className="text-foreground">Test-NetConnection 192.168.8.200 -Port 9100</code>
+                    </p>
+                    <div className="max-w-xs">
+                      <Label htmlFor="print-port">Printer port (TCP)</Label>
                       <Input
-                        id="print-agent"
-                        value={printCfg.printAgentUrl}
-                        onChange={(e) => setPrintCfg((p) => ({ ...p, printAgentUrl: e.target.value }))}
-                        placeholder="http://127.0.0.1:9101"
-                        className="mt-1 max-w-xl"
-                        disabled={printCfg.printBackend !== "http"}
+                        id="print-port"
+                        type="number"
+                        min={1}
+                        max={65535}
+                        value={printCfg.printerPort}
+                        onChange={(e) =>
+                          setPrintCfg((p) => ({
+                            ...p,
+                            printerPort: Number(e.target.value) || 9100,
+                          }))
+                        }
+                        placeholder="9100"
+                        className="mt-1"
                       />
                     </div>
                     <Button
@@ -424,10 +449,21 @@ const Settings = () => {
                       variant="secondary"
                       onClick={() => {
                         savePrintPrinterConfig(printCfg)
-                        toast.success("Printer settings saved")
+                        void savePrintSettingsToServer({
+                          customerPrinterIp: printCfg.customerPrinterIp,
+                          kitchen1PrinterIp: printCfg.kitchen1PrinterIp,
+                          kitchen2PrinterIp: printCfg.kitchen2PrinterIp,
+                          printerPort: printCfg.printerPort,
+                        })
+                          .then(() => toast.success("Printer settings saved"))
+                          .catch((err: unknown) => {
+                            savePrintPrinterConfig(printCfg)
+                            const msg = err instanceof Error ? err.message : String(err)
+                            toast.warning(`Saved locally only — print server unreachable: ${msg}`)
+                          })
                       }}
                     >
-                      Save printer names
+                      Save printer settings
                     </Button>
                   </CardContent>
                 </Card>

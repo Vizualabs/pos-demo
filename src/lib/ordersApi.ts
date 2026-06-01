@@ -1,4 +1,9 @@
 import axiosClient from "@/axios"
+import { isDemoDataEnabled } from "@/config/demoMode"
+import {
+  demoCreateOrder,
+  demoGetAllOrders,
+} from "@/lib/demoPosStore"
 import { nowIso } from "@/lib/demoPersistence"
 
 export const ORDERS_CHANGED_EVENT = "pos-orders-changed"
@@ -138,6 +143,12 @@ function toBackendOrderRequest(payload: OrderRequestDto): Record<string, unknown
 }
 
 export async function createOrder(payload: OrderRequestDto): Promise<OrderResponseDto> {
+  if (isDemoDataEnabled()) {
+    const created = demoCreateOrder(payload)
+    emitOrdersChanged()
+    return created
+  }
+
   const res = await axiosClient.post<unknown>("/orders", toBackendOrderRequest(payload))
   // Backend response may not echo items; keep the request items in memory for UI convenience.
   const created = normalizeOrder(res.data)
@@ -146,6 +157,8 @@ export async function createOrder(payload: OrderRequestDto): Promise<OrderRespon
 }
 
 export async function getAllOrders(): Promise<OrderResponseDto[]> {
+  if (isDemoDataEnabled()) return demoGetAllOrders()
+
   const res = await axiosClient.get<unknown[]>("/orders")
   return Array.isArray(res.data) ? res.data.map(normalizeOrder) : []
 }

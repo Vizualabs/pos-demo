@@ -5,7 +5,7 @@ import { DashboardLayout } from "@/components/Layout/DashboardLayout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Minus, Trash2, CreditCard, Search, ChefHat } from "lucide-react"
@@ -626,6 +626,9 @@ const POS = () => {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add to cart</DialogTitle>
+            <DialogDescription className="sr-only">
+              Choose portion size and optional kitchen note for this item.
+            </DialogDescription>
           </DialogHeader>
           {pendingAdd ? (
             <div className="grid gap-4 py-1">

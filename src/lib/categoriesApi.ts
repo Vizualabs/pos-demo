@@ -1,4 +1,6 @@
 import axiosClient from "@/axios"
+import { isDemoDataEnabled } from "@/config/demoMode"
+import { demoGetAllCategories } from "@/lib/demoPosStore"
 import { nowIso } from "@/lib/demoPersistence"
 
 export type CategoryResponseDto = {
@@ -33,6 +35,8 @@ function normalizeCategory(c: unknown): CategoryResponseDto {
 const categoryCache = new Map<number, CategoryResponseDto>()
 
 export async function getAllCategories(): Promise<CategoryResponseDto[]> {
+  if (isDemoDataEnabled()) return demoGetAllCategories()
+
   const res = await axiosClient.get<unknown[]>("/categories")
   const list = Array.isArray(res.data) ? res.data.map(normalizeCategory).filter((c) => Number.isFinite(c.categoryId)) : []
   categoryCache.clear()

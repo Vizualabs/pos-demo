@@ -1,0 +1,15 @@
+{
+  "name": "pos-print-server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node index.mjs",
+    "dev": "node --watch index.mjs"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "puppeteer": "^23.11.1",
+    "sharp": "^0.33.5"
+  }
+}

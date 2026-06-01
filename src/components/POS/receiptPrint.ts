@@ -1,8 +1,12 @@
 import { formatCurrency } from "@/lib/utils"
 import type { Kitchen } from "@/lib/ordersApi"
-import { loadPrintPrinterConfig } from "@/lib/printConfig"
-import { printHtmlViaQz } from "@/lib/qzPrintClient"
-import { postPrintToAgent } from "@/lib/httpPrintAgent"
+import {
+  customerPrinterIp,
+  isValidPrinterIp,
+  kitchenPrinterIp,
+  loadPrintPrinterConfig,
+} from "@/lib/printConfig"
+import { postPrintJobs, type ServerPrintJob } from "@/lib/serverPrint"
 import { toast } from "sonner"
 
 export type ReceiptLine = {
@@ -52,15 +56,15 @@ export type OrderBillsPayload = {
 }
 
 const kotLabels = {
-  title: "මුළුතැන්ගෙයි ඇණවුම", // Kitchen Order එකට වඩාත් ගැළපෙන වචනය
-  subtitle: "(මිල ගණන් ඇතුළත් නොවේ)", // වඩාත් පැහැදිලියි
+  title: "මුළුතැන්ගෙයි ඇණවුම",
+  subtitle: "(මිල ගණන් ඇතුළත් නොවේ)",
   orderNo: "ඇණවුම් අංකය",
   table: "මේස අංකය",
   orderType: "ඇණවුම් වර්ගය",
   time: "වේලාව",
   item: "අයිතමය / විස්තරය",
   qty: "ප්‍රමාණය",
-  note: "විශේෂ සටහන්", // Note එකට වඩාත් වෘත්තීය පෙනුමක් ලබා දෙයි
+  note: "විශේෂ සටහන්",
   none: "—",
   prepNote: "මෙම පත්‍රිකාව ආහාර පිළියෙළ කිරීම සඳහා පමණි.",
 }
@@ -202,7 +206,6 @@ const KOT_PRINT_STYLES = `
   .kot-page:last-child { page-break-after: auto; }
   .kot-single { page-break-after: auto; }
   .kot-subtitle { font-size: 0.7rem; color: #666; text-align: center; margin: 4px 0 8px; }
-  /* Key/value rows: keep labels tight, values aligned nicely */
   .kot-meta { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 4px; font-size: 0.72rem; margin-top: 8px; color: #111; align-items: baseline; }
   .kot-meta > span:nth-child(odd) { color: #555; }
   .kot-meta > span:nth-child(even) { text-align: right; font-weight: 600; }
@@ -213,8 +216,8 @@ function renderKotInnerHtml(ticket: KitchenTicketPayload, d: Date) {
     .map(
       (line) => `<tr>
       <td>${escapeHtml(kotLineItemCell(line))}</td>
-      <td style="font-weight:700">${line.qty}</td>
-      <td style="font-size:0.95rem">${escapeHtml(line.lineNote?.trim() ? line.lineNote.trim() : kotLabels.none)}</td>
+      <td style="font-size:1em;font-weight:700">${line.qty}</td>
+      <td style="font-size:0.95em">${escapeHtml(line.lineNote?.trim() ? line.lineNote.trim() : kotLabels.none)}</td>
     </tr>`,
     )
     .join("")
@@ -271,7 +274,6 @@ function buildPrintDocumentHtmlCustomerOnly(customerHtml: string): string {
       .c-brand { text-align: center; }
       .c-brand-name { font-weight: 800; font-size: 14px; letter-spacing: 0.2px; margin: 0; }
       .c-brand-sub { font-size: 10px; color: #666; margin-top: 2px; }
-      /* Center the header blocks like the KOT look */
       .c-rule { height: 1px; background: #e9e9e9; margin: 8px auto; max-width: 66mm; }
       .c-rule.dotted { background: none; border-top: 1px dashed #8c8c8c; height: 0; margin: 10px auto 8px; max-width: 66mm; }
       .meta { font-size: 10px; max-width: 66mm; margin: 0 auto; }
@@ -314,18 +316,21 @@ function buildPrintDocumentHtmlKotSingle(kotInnerHtml: string): string {
 }
 
 type RunPrintOptions = {
-  /** Use hidden iframe only — avoids popup blocker on jobs after the first (no user gesture). */
   preferIframe?: boolean
-  /** Named Windows printer for QZ Tray / HTTP agent (customer or kitchen queue). */
-  printerName?: string
+  printerIp?: string
+  slot?: string
 }
 
-function kitchenPrinterName(kitchen: Kitchen): string {
-  const cfg = loadPrintPrinterConfig()
-  return kitchen === "KITCHEN_1" ? cfg.kitchen1PrinterName.trim() : cfg.kitchen2PrinterName.trim()
+function kitchenSlot(kitchen: Kitchen): string {
+  return kitchen === "KITCHEN_1" ? "kitchen1" : "kitchen2"
 }
 
-function runPrint(html: string, onComplete?: () => void, options?: RunPrintOptions): void {
+function printHtmlInWindow(
+  win: Window,
+  html: string,
+  onComplete?: () => void,
+  opts: { closeDelayMs?: number; printDelayMs?: number; kiosk?: boolean } = {},
+): void {
   let completeFired = false
   const fireComplete = () => {
     if (completeFired) return
@@ -333,104 +338,89 @@ function runPrint(html: string, onComplete?: () => void, options?: RunPrintOptio
     onComplete?.()
   }
 
-  const cfg = loadPrintPrinterConfig()
-  const printerName = (options?.printerName ?? "").trim()
+  const closeDelayMs = opts.closeDelayMs ?? (opts.kiosk ? 4000 : 60_000)
+  const printDelayMs = opts.printDelayMs ?? 350
 
-  if (cfg.printBackend === "qz") {
-    if (!printerName) {
-      toast.error("Printer name empty — set it in Settings for this slot (QZ Tray).")
-      queueMicrotask(() => fireComplete())
-      return
-    }
-    void printHtmlViaQz(printerName, html)
-      .then(() => fireComplete())
-      .catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : String(e)
-        toast.error(`QZ Tray print failed: ${msg}`)
-        fireComplete()
-      })
-    return
-  }
-
-  if (cfg.printBackend === "http") {
-    const base = cfg.printAgentUrl.trim()
-    if (!base || !printerName) {
-      toast.error("Set print agent URL and printer names in Settings.")
-      queueMicrotask(() => fireComplete())
-      return
-    }
-    void postPrintToAgent(base, printerName, html)
-      .then(() => fireComplete())
-      .catch((e: unknown) => {
-        const msg = e instanceof Error ? e.message : String(e)
-        toast.error(`Print agent failed: ${msg}`)
-        fireComplete()
-      })
-    return
-  }
-
-  const schedulePrint = (win: Window, opts: { closeDelayMs: number; printDelayMs: number }, afterIframeRemove?: () => void) => {
+  try {
     const doc = win.document
     doc.open()
     doc.write(html)
     doc.close()
-    win.focus()
-    const doPrint = () => {
+    if (!opts.kiosk) win.focus()
+  } catch {
+    toast.error("Could not prepare bill for printing.")
+    fireComplete()
+    return
+  }
+
+  const doPrint = () => {
+    try {
       win.print()
-      const closeLater = () => {
+    } catch {
+      if (!opts.kiosk) {
+        toast.error("Print failed — check Chrome is started with --kiosk-printing for silent USB bill.")
+      }
+    }
+    const closeLater = () => {
+      if (!opts.kiosk) {
         try {
-          win.close()
+          if (!win.closed) win.close()
         } catch {
           /* ignore */
         }
-        afterIframeRemove?.()
-        fireComplete()
       }
-      win.addEventListener("afterprint", closeLater)
-      setTimeout(closeLater, opts.closeDelayMs)
+      fireComplete()
     }
-    const kick = () => setTimeout(doPrint, opts.printDelayMs)
-    if (doc.readyState === "complete") {
-      kick()
-    } else {
-      win.addEventListener("load", kick)
-    }
+    win.addEventListener("afterprint", closeLater, { once: true })
+    setTimeout(closeLater, closeDelayMs)
   }
 
-  if (!options?.preferIframe) {
-    const w = window.open("", "_blank", "width=320,height=720")
-    if (w) {
-      schedulePrint(w, { closeDelayMs: 2500, printDelayMs: 150 })
-      return
-    }
+  const kick = () => setTimeout(doPrint, printDelayMs)
+  if (win.document.readyState === "complete") {
+    kick()
+  } else {
+    win.addEventListener("load", kick, { once: true })
   }
+}
 
+/** Silent USB cashier print — hidden iframe + Chrome --kiosk-printing (no popup, no dialog). */
+function runPrintBrowserKiosk(html: string, onComplete?: () => void): void {
   const iframe = document.createElement("iframe")
   iframe.setAttribute("title", "Print receipt")
   iframe.setAttribute("aria-hidden", "true")
   iframe.style.cssText =
-    "position:fixed;inset:0;width:100vw;height:100vh;border:0;margin:0;padding:0;opacity:0;z-index:-1;pointer-events:none"
+    "position:fixed;left:-10000px;top:0;width:320px;height:2400px;border:0;margin:0;padding:0;opacity:0;pointer-events:none"
   document.body.appendChild(iframe)
   const iw = iframe.contentWindow
   if (!iw) {
     iframe.remove()
-    fireComplete()
+    onComplete?.()
     return
   }
-  schedulePrint(iw, { closeDelayMs: 8000, printDelayMs: 400 }, () => {
-    iframe.remove()
-  })
+  printHtmlInWindow(
+    iw,
+    html,
+    () => {
+      iframe.remove()
+      onComplete?.()
+    },
+    { kiosk: true },
+  )
+}
+
+/** Dev / fallback: visible print when kiosk mode is not enabled. */
+function runPrintBrowser(html: string, onComplete?: () => void, _options?: RunPrintOptions): void {
+  runPrintBrowserKiosk(html, onComplete)
 }
 
 const SEQUENTIAL_PRINT_GAP_MS = 500
 
-type PrintJob = { html: string; printerName?: string }
+type LocalPrintJob = { html: string; preferIframe?: boolean }
 
-function runPrintJobsSequential(
-  jobs: PrintJob[],
+function runPrintJobsSequentialBrowser(
+  jobs: LocalPrintJob[],
   delayBetweenMs = SEQUENTIAL_PRINT_GAP_MS,
   onAllDone?: () => void,
-  allJobsPreferIframe?: boolean,
 ): void {
   if (jobs.length === 0) {
     onAllDone?.()
@@ -443,24 +433,129 @@ function runPrintJobsSequential(
       return
     }
     const idx = i++
-    const preferIframe = allJobsPreferIframe === true || idx > 0
-    runPrint(
+    runPrintBrowser(
       jobs[idx]!.html,
       () => {
         setTimeout(next, delayBetweenMs)
       },
-      { preferIframe, printerName: jobs[idx]!.printerName },
+      { preferIframe: true },
     )
   }
   next()
 }
 
-/** Customer bill only — send to customer / cashier printer (80mm). */
-export function printCustomerBillOnly(customer: CustomerBillPayload, d: Date = new Date()): void {
+function buildKitchenServerJobs(tickets: KitchenTicketPayload[], d: Date): ServerPrintJob[] {
   const cfg = loadPrintPrinterConfig()
-  runPrint(buildPrintDocumentHtmlCustomerOnly(buildCustomerBillHtml(customer, d)), undefined, {
-    printerName: cfg.customerPrinterName,
-  })
+  const port = cfg.printerPort
+  const jobs: ServerPrintJob[] = []
+
+  for (const t of tickets) {
+    const ip = kitchenPrinterIp(t.kitchen)
+    if (!ip) {
+      throw new Error(`Kitchen printer IP empty — set Kitchen ${t.kitchen === "KITCHEN_1" ? "1" : "2"} in Settings.`)
+    }
+    if (!isValidPrinterIp(ip)) {
+      throw new Error(
+        `Kitchen ${t.kitchen === "KITCHEN_1" ? "1" : "2"} IP invalid (${ip}) — use format 192.168.1.101 in Settings.`,
+      )
+    }
+    jobs.push({
+      slot: kitchenSlot(t.kitchen),
+      html: buildPrintDocumentHtmlKotSingle(renderKotInnerHtml(t, d)),
+      printerIp: ip,
+      port,
+    })
+  }
+
+  return jobs
+}
+
+function buildCustomerBillHtmlDoc(customer: CustomerBillPayload, d: Date): string {
+  return buildPrintDocumentHtmlCustomerOnly(buildCustomerBillHtml(customer, d))
+}
+
+function buildCustomerNetworkJob(customer: CustomerBillPayload, d: Date): ServerPrintJob {
+  const cfg = loadPrintPrinterConfig()
+  const ip = customerPrinterIp()
+  if (!ip) {
+    throw new Error("Cashier printer IP empty — set Customer bill printer IP in Settings.")
+  }
+  if (!isValidPrinterIp(ip)) {
+    throw new Error(`Cashier printer IP invalid (${ip}) — use format 192.168.1.100 in Settings.`)
+  }
+  return {
+    slot: "customer",
+    html: buildCustomerBillHtmlDoc(customer, d),
+    printerIp: ip,
+    port: cfg.printerPort,
+  }
+}
+
+async function runServerPrintJobs(
+  jobs: ServerPrintJob[],
+  orderId: number,
+): Promise<boolean> {
+  if (jobs.length === 0) return true
+  try {
+    const result = await postPrintJobs(jobs, orderId)
+    if (!result.ok) {
+      const failedList = result.failed.map((f) => `${f.slot}: ${f.error}`).join("; ")
+      toast.error(`Print failed — ${failedList}`, { duration: 8000 })
+      return false
+    }
+    if (result.printed.length > 0) {
+      toast.success(`Printed: ${result.printed.join(", ")}`, { duration: 3000 })
+    }
+    return true
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    toast.error(`Print server unreachable — kitchen not printed. Is npm run dev:server running? (${msg})`, {
+      duration: 8000,
+    })
+    return false
+  }
+}
+
+async function dispatchOrderPrint(
+  tickets: KitchenTicketPayload[],
+  customer: CustomerBillPayload | null,
+  d: Date,
+  onComplete?: () => void,
+): Promise<void> {
+  const cfg = loadPrintPrinterConfig()
+  const orderId = customer?.orderId ?? tickets[0]?.orderId ?? 0
+
+  if (cfg.printBackend === "browser") {
+    const htmlJobs: LocalPrintJob[] = []
+    for (const t of tickets) {
+      htmlJobs.push({
+        html: buildPrintDocumentHtmlKotSingle(renderKotInnerHtml(t, d)),
+      })
+    }
+    if (customer) {
+      htmlJobs.push({ html: buildCustomerBillHtmlDoc(customer, d) })
+    }
+    runPrintJobsSequentialBrowser(htmlJobs, SEQUENTIAL_PRINT_GAP_MS, onComplete)
+    return
+  }
+
+  try {
+    const jobs = buildKitchenServerJobs(tickets, d)
+    if (customer) {
+      jobs.push(buildCustomerNetworkJob(customer, d))
+    }
+    await runServerPrintJobs(jobs, orderId)
+    onComplete?.()
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    toast.error(`Print failed: ${msg}`)
+    onComplete?.()
+  }
+}
+
+/** Customer bill only — LAN printer IP via print server. */
+export function printCustomerBillOnly(customer: CustomerBillPayload, d: Date = new Date()): void {
+  void dispatchOrderPrint([], customer, d)
 }
 
 /** One print job per kitchen station (Kitchen 1 printer, then Kitchen 2 printer, etc.). */
@@ -473,17 +568,12 @@ export function printKitchenTicketsForStationsSequentially(
     onAllComplete?.()
     return
   }
-  const jobs = tickets.map((t) => ({
-    html: buildPrintDocumentHtmlKotSingle(renderKotInnerHtml(t, d)),
-    printerName: kitchenPrinterName(t.kitchen),
-  }))
-  runPrintJobsSequential(jobs, SEQUENTIAL_PRINT_GAP_MS, onAllComplete, false)
+  void dispatchOrderPrint(tickets, null, d, onAllComplete)
 }
 
 /**
- * Customer bill first (pick customer/cashier printer), then one print per kitchen station (Kitchen 1, then Kitchen 2).
- * Kitchen jobs use iframe printing so the browser does not block popups after the first dialog.
- * @param onAllComplete — run after every job finishes (e.g. close UI).
+ * Kitchen ticket(s) first (Kitchen 1, then Kitchen 2), then customer bill.
+ * All three printers via LAN IP → print server → TCP :9100 ESC/POS.
  */
 export function printCustomerBillAndKitchenTickets(
   customer: CustomerBillPayload,
@@ -491,19 +581,7 @@ export function printCustomerBillAndKitchenTickets(
   d: Date,
   onAllComplete?: () => void,
 ) {
-  const cfg = loadPrintPrinterConfig()
-  const customerDoc = buildPrintDocumentHtmlCustomerOnly(buildCustomerBillHtml(customer, d))
-  const kotJobs = tickets.map((t) => ({
-    html: buildPrintDocumentHtmlKotSingle(renderKotInnerHtml(t, d)),
-    printerName: kitchenPrinterName(t.kitchen),
-  }))
-  if (kotJobs.length === 0) {
-    runPrint(customerDoc, onAllComplete, { printerName: cfg.customerPrinterName })
-    return
-  }
-  runPrint(customerDoc, () => {
-    runPrintJobsSequential(kotJobs, SEQUENTIAL_PRINT_GAP_MS, onAllComplete, true)
-  }, { printerName: cfg.customerPrinterName })
+  void dispatchOrderPrint(tickets, customer, d, onAllComplete)
 }
 
 /** @deprecated Use printKitchenTicketsForStationsSequentially — kept for existing imports. */

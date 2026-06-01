@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { formatCurrency } from "@/lib/utils"
 import {
@@ -24,7 +24,8 @@ export function SinhalaReceiptDialog({
 
   const d = new Date()
   const L = customerReceiptDialogLabels
-  const printBackend = loadPrintPrinterConfig().printBackend
+  const printCfg = loadPrintPrinterConfig()
+  const printBackend = printCfg.printBackend
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -38,6 +39,9 @@ export function SinhalaReceiptDialog({
                 ? "Sale complete"
                 : "Order complete"}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Review the receipt and print kitchen tickets and customer bill.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="mt-4 space-y-3">
@@ -142,15 +146,16 @@ export function SinhalaReceiptDialog({
               <p className="text-[10px] text-muted-foreground text-right leading-snug max-w-md ml-auto">
                 {printBackend === "browser" ? (
                   <>
-                    Separate print dialogs: <span className="font-medium text-foreground">customer bill</span> first,
-                    then <span className="font-medium text-foreground">one per kitchen station</span>. Pick the correct
-                    80mm printer each time.
+                    Dev mode: separate print dialogs —{" "}
+                    <span className="font-medium text-foreground">one per kitchen station</span>, then{" "}
+                    <span className="font-medium text-foreground">customer bill</span>.
                   </>
                 ) : (
                   <>
-                    Jobs run in order: <span className="font-medium text-foreground">customer bill</span>, then{" "}
-                    <span className="font-medium text-foreground">one ticket per kitchen</span>, using the printer names
-                    in Settings (silent — no browser print dialog).
+                    Sent silently via print server:{" "}
+                    <span className="font-medium text-foreground">kitchen 1</span> →{" "}
+                    <span className="font-medium text-foreground">kitchen 2</span> →{" "}
+                    <span className="font-medium text-foreground">cashier bill</span> (LAN IP, no dialog).
                   </>
                 )}
               </p>

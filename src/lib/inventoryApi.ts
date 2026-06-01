@@ -1,4 +1,5 @@
 import axiosClient from "@/axios"
+import { isDemoDataEnabled } from "@/config/demoMode"
 import { nowIso } from "@/lib/demoPersistence"
 
 export interface InventoryItemResponseDto {
@@ -78,6 +79,8 @@ export async function deleteInventoryItem(itemId: number): Promise<void> {
 export type InventoryUsageDeductionLine = { itemId: number; quantity: number }
 
 export async function applyInventoryUsageDeductions(lines: InventoryUsageDeductionLine[]): Promise<InventoryItemResponseDto[]> {
+  if (isDemoDataEnabled() || lines.length === 0) return []
+
   const res = await axiosClient.post<unknown[]>("/inventory/deduct", { lines })
   return Array.isArray(res.data) ? res.data.map((x) => normalizeItem(x as Record<string, unknown>)) : []
 }
