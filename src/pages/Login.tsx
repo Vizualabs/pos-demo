@@ -1,5 +1,7 @@
-import { useState, FormEvent } from "react"
+import { useState, FormEvent, useEffect } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
+import { isSkipLoginEnabled } from "@/config/devAuth"
+import { useAuth } from "@/hooks/useAuth"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,40 +16,19 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { AlertCircle, LogIn } from "lucide-react"
-import type { UserRole } from "@/hooks/useAuth"
+import { clearAuthSession, getRoleFromUser } from "@/lib/authSession"
 
-const LOGIN_API = "http://localhost:8080/api/security/login"
-const USER_DETAILS_API = "http://localhost:8080/api/security/user/details"
-const RESET_PASSWORD_API = "http://localhost:8080/api/security/reset-password"
+const LOGIN_API = "/api/security/login"
+const USER_DETAILS_API = "/api/security/user/details"
+const RESET_PASSWORD_API = "/api/security/reset-password"
 
 const MAX_USERNAME_LEN = 50
 const MAX_PASSWORD_LEN = 128
 
-const getRoleFromUser = (user: any): UserRole => {
-  const normalizeRole = (role: unknown) =>
-    String(role ?? "")
-      .trim()
-      .toUpperCase()
-      .replace(/^ROLE_/, "")
-
-  const roles = [
-    normalizeRole(user?.role),
-    ...(Array.isArray(user?.authorities)
-      ? user.authorities.map((auth: any) => normalizeRole(typeof auth === "string" ? auth : auth?.authority || auth?.name || auth?.role))
-      : []),
-    ...(Array.isArray(user?.roles)
-      ? user.roles.map((role: any) => normalizeRole(typeof role === "string" ? role : role?.name || role?.authority || role?.role))
-      : []),
-  ].filter(Boolean)
-
-  if (roles.includes("ADMIN")) return "ADMIN"
-  if (roles.includes("USER")) return "USER"
-  return "GUEST"
-}
-
 const Login = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { isLoggedIn } = useAuth()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -59,6 +40,14 @@ const Login = () => {
   const [resetError, setResetError] = useState<string | null>(null)
   const [resetSuccess, setResetSuccess] = useState<string | null>(null)
   const [resetSubmitting, setResetSubmitting] = useState(false)
+
+  /** Opening `/` directly always shows a fresh login (not a stale “already signed in” session). */
+  useEffect(() => {
+    if (isSkipLoginEnabled()) return
+    const redirectedFrom = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname
+    if (redirectedFrom && redirectedFrom !== "/") return
+    if (isLoggedIn()) clearAuthSession()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps -- only on mount at entry
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -104,10 +93,7 @@ const Login = () => {
 
       if (role === "GUEST") {
         setError("Login succeeded, but no valid user role was found.")
-        localStorage.removeItem("isLoggedIn")
-        localStorage.removeItem("user")
-        localStorage.removeItem("token")
-        localStorage.removeItem("auth_token")
+        clearAuthSession()
         return
       }
 
@@ -115,7 +101,9 @@ const Login = () => {
       localStorage.setItem("isLoggedIn", "true")
 
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname
-      navigate(from || "/pos", { replace: true })
+      const target =
+        from && from !== "/" && from !== "/login" ? from : "/pos"
+      navigate(target, { replace: true })
     } catch {
       setError("Login failed. Please check credentials and try again.")
     } finally {

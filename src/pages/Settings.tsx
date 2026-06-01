@@ -43,6 +43,7 @@ import {
   type PrintPrinterConfig,
 } from "@/lib/printConfig"
 import { fetchPrintSettings, savePrintSettingsToServer } from "@/lib/serverPrint"
+import { clearAuthSession } from "@/lib/authSession"
 
 const Settings = () => {
   const navigate = useNavigate()
@@ -111,7 +112,7 @@ const Settings = () => {
   const fetchUserDetails = async (isLoading = true) => {
     if (isLoading) setUserDetailsLoading(true)
     try {
-      const response = await fetch("http://localhost:8080/api/security/user/details", {
+      const response = await fetch("http://localhost:8081/api/security/user/details", {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -146,7 +147,7 @@ const Settings = () => {
 
     setUserDetailsUpdating(true)
     try {
-      const response = await fetch("http://localhost:8080/api/security/user/updatedetails", {
+      const response = await fetch("http://localhost:8081/api/security/user/updatedetails", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -182,10 +183,8 @@ const Settings = () => {
   }, [activeTab])
 
   const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn")
-    localStorage.removeItem("token")
-    localStorage.removeItem("user")
-    navigate("/login", { replace: true })
+    clearAuthSession()
+    navigate("/", { replace: true })
   }
 
   const handleChangePassword = async () => {
@@ -207,7 +206,7 @@ const Settings = () => {
 
     setPasswordLoading(true)
     try {
-      const response = await fetch("http://localhost:8080/api/security/update-password", {
+      const response = await fetch("http://localhost:8081/api/security/update-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

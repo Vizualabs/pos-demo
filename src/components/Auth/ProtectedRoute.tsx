@@ -14,7 +14,7 @@ export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) 
   const skipLogin = isSkipLoginEnabled()
 
   if (!skipLogin && !isLoggedIn()) {
-    return <Navigate to="/login" replace state={{ from: location }} />
+    return <Navigate to="/" replace state={{ from: location }} />
   }
 
   const role = skipLogin ? "ADMIN" : getUserRole()

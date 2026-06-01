@@ -1,4 +1,3 @@
-import { getDefaultApiBaseUrl } from "@/lib/apiClient"
 import { mergePrintPrinterConfig, type PrintPrinterConfig } from "@/lib/printConfig"
 
 export type ServerPrintJob = {
@@ -16,9 +15,10 @@ export type ServerPrintJobsResponse = {
   error?: string
 }
 
+/** Node print server — never use Java `VITE_API_BASE_URL` (8081). Dev: Vite proxies `/api/print` → :3001. */
 function printApiBase(): string {
-  const apiBase = getDefaultApiBaseUrl()
-  if (apiBase) return `${apiBase}/print`
+  const fromEnv = import.meta.env.VITE_PRINT_API_BASE_URL?.trim()
+  if (fromEnv) return fromEnv.replace(/\/+$/, "")
   return "/api/print"
 }
 

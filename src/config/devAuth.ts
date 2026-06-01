@@ -16,25 +16,3 @@ export function ensureDevAuthSession(): void {
     }),
   )
 }
-
-/** Remove fake dev session left from VITE_SKIP_LOGIN=true so real login is required. */
-export function clearStaleDevAuthSession(): void {
-  if (isSkipLoginEnabled()) return
-  try {
-    const userRaw = localStorage.getItem("user")
-    if (!userRaw) {
-      localStorage.removeItem("isLoggedIn")
-      return
-    }
-    const user = JSON.parse(userRaw) as { username?: string; fullName?: string }
-    if (user.username === "dev" && user.fullName === "Dev Tester") {
-      localStorage.removeItem("isLoggedIn")
-      localStorage.removeItem("user")
-      localStorage.removeItem("token")
-      localStorage.removeItem("auth_token")
-    }
-  } catch {
-    localStorage.removeItem("isLoggedIn")
-    localStorage.removeItem("user")
-  }
-}

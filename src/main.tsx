@@ -1,10 +1,11 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
-import { clearStaleDevAuthSession, ensureDevAuthSession } from "./config/devAuth";
+import { ensureDevAuthSession } from "./config/devAuth";
+import { sanitizeAuthSession } from "./lib/authSession";
 import { syncPrintSettingsFromServer } from "./lib/serverPrint";
 
-clearStaleDevAuthSession();
+sanitizeAuthSession();
 ensureDevAuthSession();
 void syncPrintSettingsFromServer();
 

@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "./components/Auth/ProtectedRoute";
-import { RootRedirect } from "./components/Auth/RootRedirect";
+import { RootRoute } from "./components/Auth/RootRoute";
 import { LoginRoute } from "./components/Auth/LoginRoute";
 import Dashboard from "./pages/Dashboard";
 import POS from "./pages/POS";
@@ -29,7 +29,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <Routes>
-          <Route path="/" element={<RootRedirect />} />
+          <Route path="/" element={<RootRoute />} />
           <Route path="/login" element={<LoginRoute />} />
 
           <Route
@@ -130,7 +130,14 @@ const App = () => (
           />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
+          <Route
+            path="*"
+            element={
+              <ProtectedRoute>
+                <NotFound />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
