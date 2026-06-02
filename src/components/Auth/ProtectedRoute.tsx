@@ -1,6 +1,8 @@
 import { ReactElement } from "react"
 import { Navigate, useLocation } from "react-router-dom"
-import { useAuth, type UserRole } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/useAuth"
+import type { UserRole } from "@/lib/authSession"
+import { AuthGate } from "@/components/Auth/AuthGate"
 
 type ProtectedRouteProps = {
   children: ReactElement
@@ -9,10 +11,14 @@ type ProtectedRouteProps = {
 
 export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
   const location = useLocation()
-  const { getUserRole, isLoggedIn } = useAuth()
+  const { authReady, isAuthenticated, getUserRole } = useAuth()
 
-  if (!isLoggedIn()) {
-    return <Navigate to="/login" replace state={{ from: location }} />
+  if (!authReady) {
+    return <AuthGate>{null}</AuthGate>
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace state={{ from: location }} />
   }
 
   const role = getUserRole()

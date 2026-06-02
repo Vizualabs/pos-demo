@@ -7,12 +7,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { getApiErrorMessage } from "@/lib/apiErrors"
+import { getCustomerById } from "@/lib/customersApi"
 import {
-  createCustomerMealInvoice,
-  deleteCustomerMealInvoice,
-  getAllCustomerMealInvoices,
-  patchCustomerMealInvoice,
-  type CustomerMealInvoiceResponseDto,
+  createCustomerMealInvoiceDocument,
+  deleteCustomerMealInvoiceDocument,
+  getAllCustomerMealInvoiceDocuments,
+  markCustomerMealInvoiceDocumentPaid,
+  type CustomerMealInvoiceDocument,
   type MealType,
 } from "@/lib/customerMealInvoicesApi"
 import { generateCustomerMealInvoicePdf, generatePDF } from "@/lib/pdfUtils"
@@ -33,27 +35,8 @@ function isEmptyBackendListError(e: unknown): boolean {
   const m = msg.toLowerCase()
   return m.includes("not.found") || m.includes("no invoice") || m.includes("no invoice records")
 }
-function getApiErrorMessage(e: unknown, fallback: string): string {
-  if (e instanceof Error && e.message) return e.message
-  if (typeof e === "object" && e !== null) {
-    const err = e as {
-      response?: { data?: { message?: string; error?: string; errors?: unknown } }
-      message?: string
-    }
-    const msg =
-      err.response?.data?.message ??
-      err.response?.data?.error ??
-      (Array.isArray(err.response?.data?.errors)
-        ? (err.response?.data?.errors as string[]).join(", ")
-        : undefined) ??
-      err.message
-    if (msg && String(msg).trim().length > 0) return String(msg)
-  }
-  return fallback
-}
-
 const Accounting = () => {
-  const [invoices, setInvoices] = useState<CustomerMealInvoiceResponseDto[]>([])
+  const [invoices, setInvoices] = useState<CustomerMealInvoiceDocument[]>([])
   const [loading, setLoading] = useState(true)
 
   const [customerId, setCustomerId] = useState("")
@@ -67,7 +50,7 @@ const Accounting = () => {
     ;(async () => {
       setLoading(true)
       try {
-        const list = await getAllCustomerMealInvoices()
+        const list = await getAllCustomerMealInvoiceDocuments()
         if (!cancelled) setInvoices(list)
       } catch (e) {
         console.error(e)
@@ -132,27 +115,46 @@ const Accounting = () => {
       }
     }
 
+    let resolvedCustomerId: number | undefined
+    let resolvedCustomerName: string | undefined
+
+    if (hasCustomerId) {
+      try {
+        const customer = await getCustomerById(parsedCustomerId)
+        resolvedCustomerId = customer.customerId
+        resolvedCustomerName = customer.name.trim()
+      } catch (e) {
+        console.error(e)
+        toast.error(
+          getApiErrorMessage(
+            e,
+            `Customer ID ${parsedCustomerId} was not found. Register the customer first, or use Customer name only.`,
+          ),
+        )
+        return
+      }
+    } else {
+      resolvedCustomerName = customerName.trim()
+    }
+
     try {
-      const createdRows: CustomerMealInvoiceResponseDto[] = []
-      for (const line of invoiceLines) {
-        const created = await createCustomerMealInvoice({
-          ...(hasCustomerId
-            ? { customerId: parsedCustomerId, customerName: null }
-            : { customerId: null, customerName: customerName.trim() }),
+      const created = await createCustomerMealInvoiceDocument({
+        ...(resolvedCustomerId != null ? { customerId: resolvedCustomerId } : {}),
+        ...(resolvedCustomerName ? { customerName: resolvedCustomerName } : {}),
+        lines: invoiceLines.map((line) => ({
           mealType: line.mealType,
           quantity: Number.parseFloat(line.quantity),
           unitPrice: Number.parseFloat(line.unitPrice),
-        })
-        createdRows.push(created)
-      }
-      setInvoices((prev) => [...createdRows.reverse(), ...prev])
+        })),
+      })
+      setInvoices((prev) => [created, ...prev])
       setCustomerId("")
       setCustomerName("")
       setInvoiceLines([{ mealType: "LUNCH", quantity: "1", unitPrice: "650" }])
       toast.success(
-        createdRows.length === 1
+        created.lines.length === 1
           ? "Invoice created."
-          : `${createdRows.length} invoice lines created successfully.`,
+          : `Invoice created with ${created.lines.length} meal lines.`,
       )
     } catch (e) {
       console.error(e)
@@ -160,10 +162,10 @@ const Accounting = () => {
     }
   }
 
-  const handleMarkPaid = async (inv: CustomerMealInvoiceResponseDto) => {
+  const handleMarkPaid = async (inv: CustomerMealInvoiceDocument) => {
     try {
-      const updated = await patchCustomerMealInvoice(inv.invoiceId, { status: "PAID" })
-      setInvoices((prev) => prev.map((x) => (x.invoiceId === inv.invoiceId ? updated : x)))
+      const updated = await markCustomerMealInvoiceDocumentPaid(inv)
+      setInvoices((prev) => prev.map((x) => (x.groupId === inv.groupId ? updated : x)))
       toast.success("Marked paid.")
     } catch (e) {
       console.error(e)
@@ -171,11 +173,12 @@ const Accounting = () => {
     }
   }
 
-  const handleDelete = async (inv: CustomerMealInvoiceResponseDto) => {
-    if (!window.confirm(`Delete invoice ${inv.invoiceNo}?`)) return
+  const handleDelete = async (inv: CustomerMealInvoiceDocument) => {
+    const lineNote = inv.lines.length > 1 ? ` (${inv.lines.length} meal lines)` : ""
+    if (!window.confirm(`Delete invoice ${inv.invoiceNo}?${lineNote}`)) return
     try {
-      await deleteCustomerMealInvoice(inv.invoiceId)
-      setInvoices((prev) => prev.filter((x) => x.invoiceId !== inv.invoiceId))
+      await deleteCustomerMealInvoiceDocument(inv)
+      setInvoices((prev) => prev.filter((x) => x.groupId !== inv.groupId))
       toast.success("Invoice deleted.")
     } catch (e) {
       console.error(e)
@@ -183,9 +186,9 @@ const Accounting = () => {
     }
   }
 
-  const handleDownloadInvoice = (inv: CustomerMealInvoiceResponseDto) => {
+  const handleDownloadInvoice = async (inv: CustomerMealInvoiceDocument) => {
     try {
-      generateCustomerMealInvoicePdf(inv)
+      await generateCustomerMealInvoicePdf(inv)
     } catch (e) {
       console.error(e)
       toast.error("Could not download invoice PDF.")
@@ -249,7 +252,8 @@ const Accounting = () => {
               <CardHeader>
                 <CardTitle>Create invoice</CardTitle>
                 <CardDescription>
-                  Add one or more meal lines. Each line creates a backend invoice row under the same customer.
+                  Add meal lines for one customer — all lines go on <strong>one invoice</strong>. Use customer name for
+                  walk-in guests, or a valid customer ID from CRM.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 pdf-hide">
@@ -368,9 +372,9 @@ const Accounting = () => {
                     <TableRow>
                       <TableHead>Invoice</TableHead>
                       <TableHead>Customer</TableHead>
-                      <TableHead>Meal type</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                      <TableHead className="text-right">Unit</TableHead>
+                      <TableHead>Meals</TableHead>
+                      <TableHead className="text-right">Lines</TableHead>
+                      <TableHead className="text-right">Qty (sum)</TableHead>
                       <TableHead className="text-right">Total</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
@@ -386,12 +390,18 @@ const Accounting = () => {
                       </TableRow>
                     ) : (
                       invoices.map((inv) => (
-                        <TableRow key={inv.invoiceId}>
+                        <TableRow key={inv.groupId}>
                           <TableCell className="font-mono text-xs whitespace-nowrap">{inv.invoiceNo}</TableCell>
                           <TableCell className="max-w-[220px] truncate">{inv.customerName}</TableCell>
-                          <TableCell>{inv.mealType}</TableCell>
-                          <TableCell className="text-right">{inv.quantity}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(inv.unitPrice)}</TableCell>
+                          <TableCell className="max-w-[200px]">
+                            <span className="line-clamp-2 text-sm">
+                              {inv.lines.map((l) => l.mealType).join(", ")}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">{inv.lines.length}</TableCell>
+                          <TableCell className="text-right">
+                            {inv.lines.reduce((s, l) => s + l.quantity, 0)}
+                          </TableCell>
                           <TableCell className="text-right font-semibold">{formatCurrency(inv.total)}</TableCell>
                           <TableCell>
                             <Badge variant={inv.status === "PAID" ? "default" : "secondary"}>{inv.status}</Badge>
