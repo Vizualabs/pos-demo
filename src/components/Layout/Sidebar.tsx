@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, 
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 import type { FeatureKey } from "@/config/features";
 import { featureConfigs } from "@/config/features";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
+import { PROFILE_AVATAR_CHANGED, resolveProfileAvatarUrl } from "@/lib/profileAvatar";
 
 type MenuItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -45,7 +47,15 @@ const menuItems: MenuItem[] = [
 export const Sidebar = () => {
   const location = useLocation();
   const { getUserRole } = useAuth();
+  const [avatarUrl, setAvatarUrl] = useState(() => resolveProfileAvatarUrl());
   const role = getUserRole();
+
+  useEffect(() => {
+    const sync = () => setAvatarUrl(resolveProfileAvatarUrl());
+    sync();
+    window.addEventListener(PROFILE_AVATAR_CHANGED, sync);
+    return () => window.removeEventListener(PROFILE_AVATAR_CHANGED, sync);
+  }, []);
   const visibleMenuItems = menuItems.filter((item) => !item.visibleFor || item.visibleFor.includes(role));
   const displayRole = role === "ADMIN" ? "Admin" : "User";
 
@@ -55,7 +65,7 @@ export const Sidebar = () => {
       <div className="p-8 border-b border-sidebar-border">
         <div className="flex flex-col items-center text-center gap-4">
           <img
-            src="/Admin.png"
+            src={avatarUrl}
             alt="Admin avatar"
             className="w-28 h-28 rounded-full ring-2 ring-white/10 shadow-modern object-cover"
           />

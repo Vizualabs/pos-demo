@@ -1,4 +1,6 @@
-import { useState, FormEvent } from "react"
+import { useState, FormEvent, useEffect } from "react"
+import { clearAuthSession, persistAuthSession } from "@/lib/authSession"
+import { useAuth } from "@/hooks/useAuth"
 import { useNavigate, useLocation } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,9 +18,9 @@ import {
 import { AlertCircle, LogIn } from "lucide-react"
 import type { UserRole } from "@/hooks/useAuth"
 
-const LOGIN_API = "http://localhost:8080/api/security/login"
-const USER_DETAILS_API = "http://localhost:8080/api/security/user/details"
-const RESET_PASSWORD_API = "http://localhost:8080/api/security/reset-password"
+const LOGIN_API = "/api/security/login"
+const USER_DETAILS_API = "/api/security/user/details"
+const RESET_PASSWORD_API = "/api/security/reset-password"
 
 const MAX_USERNAME_LEN = 50
 const MAX_PASSWORD_LEN = 128
@@ -48,6 +50,7 @@ const getRoleFromUser = (user: any): UserRole => {
 const Login = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { isAuthenticated, markAuthenticated } = useAuth()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -59,6 +62,13 @@ const Login = () => {
   const [resetError, setResetError] = useState<string | null>(null)
   const [resetSuccess, setResetSuccess] = useState<string | null>(null)
   const [resetSubmitting, setResetSubmitting] = useState(false)
+
+  useEffect(() => {
+    const from = (location.state as { from?: unknown } | null)?.from
+    if (!from && !isAuthenticated) {
+      clearAuthSession()
+    }
+  }, [location.state, isAuthenticated])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -111,8 +121,8 @@ const Login = () => {
         return
       }
 
-      localStorage.setItem("user", JSON.stringify(user))
-      localStorage.setItem("isLoggedIn", "true")
+      persistAuthSession(user, data.token)
+      markAuthenticated()
 
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname
       navigate(from || "/pos", { replace: true })

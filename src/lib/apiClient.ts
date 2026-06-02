@@ -17,19 +17,19 @@ export type ApiClientOptions = {
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, "")
+  return baseUrl.replace(/\/+$/, "").replace(/\/api$/i, "")
 }
 
 export function getDefaultApiBaseUrl(): string {
-  const fromEnv = import.meta.env.VITE_API_BASE_URL
-  if (fromEnv?.trim()) return normalizeBaseUrl(fromEnv.trim())
+  const fromEnv = import.meta.env.VITE_API_BASE_URL?.trim()
+  if (fromEnv) return normalizeBaseUrl(fromEnv)
   return ""
 }
 
 export function getStoredAuthToken(): string | null {
   if (typeof window === "undefined") return null
   try {
-    return localStorage.getItem("token")
+    return localStorage.getItem("auth_token") ?? localStorage.getItem("token")
   } catch {
     return null
   }

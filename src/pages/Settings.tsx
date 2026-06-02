@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
+import { useAuth } from "@/hooks/useAuth"
 import { DashboardLayout } from "@/components/Layout/DashboardLayout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -41,9 +42,16 @@ import {
   type PrintBackend,
   type PrintPrinterConfig,
 } from "@/lib/printConfig"
+import {
+  PROFILE_AVATAR_CHANGED,
+  extractProfileImageFromUser,
+  resolveProfileAvatarUrl,
+  uploadProfileAvatar,
+} from "@/lib/profileAvatar"
 
 const Settings = () => {
   const navigate = useNavigate()
+  const { logout } = useAuth()
   const GENERAL_SETTINGS_KEY = "posGeneralSettings"
   const [printCfg, setPrintCfg] = useState<PrintPrinterConfig>(() => loadPrintPrinterConfig())
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
@@ -72,6 +80,9 @@ const Settings = () => {
   })
   const [passwordLoading, setPasswordLoading] = useState(false)
   const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [profileAvatarUrl, setProfileAvatarUrl] = useState(() => resolveProfileAvatarUrl())
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const photoInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     try {
@@ -93,7 +104,7 @@ const Settings = () => {
   const fetchUserDetails = async (isLoading = true) => {
     if (isLoading) setUserDetailsLoading(true)
     try {
-      const response = await fetch("http://localhost:8080/api/security/user/details", {
+      const response = await fetch("/api/security/user/details", {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -111,6 +122,7 @@ const Settings = () => {
         phoneNumber: data.phoneNumber || "",
         role: data.role || "",
       })
+      setProfileAvatarUrl(extractProfileImageFromUser(data) ?? resolveProfileAvatarUrl())
     } catch (error) {
       console.error("Error fetching user details:", error)
       toast.error("Failed to load user details")
@@ -128,7 +140,7 @@ const Settings = () => {
 
     setUserDetailsUpdating(true)
     try {
-      const response = await fetch("http://localhost:8080/api/security/user/updatedetails", {
+      const response = await fetch("/api/security/user/updatedetails", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -163,11 +175,38 @@ const Settings = () => {
     }
   }, [activeTab])
 
+  useEffect(() => {
+    const syncAvatar = () => setProfileAvatarUrl(resolveProfileAvatarUrl())
+    window.addEventListener(PROFILE_AVATAR_CHANGED, syncAvatar)
+    return () => window.removeEventListener(PROFILE_AVATAR_CHANGED, syncAvatar)
+  }, [])
+
+  const handleProfilePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+
+    setAvatarUploading(true)
+    try {
+      const { url, savedOnServer } = await uploadProfileAvatar(file)
+      setProfileAvatarUrl(url)
+      if (savedOnServer) {
+        toast.success("Profile picture updated.")
+        await fetchUserDetails(false)
+      } else {
+        toast.success("Profile picture saved on this device.")
+      }
+    } catch (error) {
+      console.error("Profile picture upload failed:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to update profile picture")
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
   const handleLogout = () => {
-    localStorage.removeItem("isLoggedIn")
-    localStorage.removeItem("token")
-    localStorage.removeItem("user")
-    navigate("/login", { replace: true })
+    logout()
+    navigate("/", { replace: true })
   }
 
   const handleChangePassword = async () => {
@@ -189,7 +228,7 @@ const Settings = () => {
 
     setPasswordLoading(true)
     try {
-      const response = await fetch("http://localhost:8080/api/security/update-password", {
+      const response = await fetch("/api/security/update-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -516,17 +555,30 @@ const Settings = () => {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="flex items-center gap-4">
-                      <img 
-                        src="/Admin.png" 
-                        alt="Admin" 
-                        className="w-16 h-16 rounded-full object-cover"
+                      <img
+                        src={profileAvatarUrl}
+                        alt="Profile"
+                        className="w-16 h-16 rounded-full object-cover ring-2 ring-border"
                       />
                       <div>
-                        <Button variant="outline" size="sm">
+                        <input
+                          ref={photoInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => void handleProfilePhotoSelect(e)}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={avatarUploading}
+                          onClick={() => photoInputRef.current?.click()}
+                        >
                           <Upload className="w-4 h-4 mr-2" />
-                          Change Photo
+                          {avatarUploading ? "Uploading…" : "Change Photo"}
                         </Button>
-                        <p className="text-xs text-muted-foreground mt-1">JPG, PNG up to 2MB</p>
+                        <p className="text-xs text-muted-foreground mt-1">JPG, PNG or WebP up to 2MB</p>
                       </div>
                     </div>
                   </CardContent>

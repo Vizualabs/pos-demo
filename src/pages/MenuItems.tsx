@@ -6,6 +6,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Plus, UtensilsCrossed, Trash2, Pencil, X } from "lucide-react"
 import { toast } from "sonner"
 import { formatCurrency, cn } from "@/lib/utils"
@@ -71,6 +81,8 @@ const MenuItems = () => {
   const [isAddingCategory, setIsAddingCategory] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
   const [isSavingCategory, setIsSavingCategory] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{ productId: number; name: string } | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const [imageObjectUrls, setImageObjectUrls] = useState<Record<number, { imageUrl: string; objectUrl: string }>>({})
 
@@ -199,8 +211,10 @@ const MenuItems = () => {
       } catch (e) {
         console.error(e)
         if (!cancelled) {
-          setUploadError("Failed to load categories, products, or inventory. Please refresh the page.")
-          setCategories([]) // removed hardcoded categories
+          const message = "Failed to load categories, products, or inventory. Please refresh the page."
+          setUploadError(message)
+          toast.error(message)
+          setCategories([])
           setInventoryItems([])
         }
       } finally {
@@ -478,19 +492,28 @@ const MenuItems = () => {
       setIsDialogOpen(false)
     } catch (e) {
       console.error(e)
-      setUploadError(e instanceof Error ? e.message : "Failed to save product. Please try again.")
+      const message = e instanceof Error ? e.message : "Failed to save product. Please try again."
+      setUploadError(message)
+      toast.error(message)
     } finally {
       setIsSaving(false)
     }
   }
 
   const handleDelete = async (productId: number) => {
+    setIsDeleting(true)
     try {
       await deleteProduct(productId)
       setItems((prev) => prev.filter((p) => p.productId !== productId))
+      toast.success("Menu item deleted.")
+      setDeleteTarget(null)
     } catch (error) {
       console.error(error)
-      setUploadError("Failed to delete product.")
+      const message = error instanceof Error ? error.message : "Failed to delete product."
+      setUploadError(message)
+      toast.error(message)
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -950,6 +973,11 @@ const MenuItems = () => {
           </CardHeader>
 
           <CardContent>
+            {uploadError && !isDialogOpen && (
+              <p className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {uploadError}
+              </p>
+            )}
             {items.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <div className="mb-3 rounded-full bg-muted p-3">
@@ -1007,6 +1035,7 @@ const MenuItems = () => {
                             variant="outline"
                             size="icon"
                             className="h-8 w-8"
+                            aria-label={`Edit ${item.name}`}
                             onClick={() => {
                               setEditingProductId(item.productId)
                               setProductIdDraft(String(item.productId))
@@ -1038,7 +1067,13 @@ const MenuItems = () => {
                             <Pencil className="h-4 w-4" />
                           </Button>
 
-                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => handleDelete(item.productId)}>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            aria-label={`Delete ${item.name}`}
+                            onClick={() => setDeleteTarget({ productId: item.productId, name: item.name })}
+                          >
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -1085,6 +1120,32 @@ const MenuItems = () => {
             )}
           </CardContent>
         </Card>
+
+        <AlertDialog open={deleteTarget != null} onOpenChange={(open) => !open && !isDeleting && setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete menu item?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deleteTarget
+                  ? `"${deleteTarget.name}" (${formatItemCode(deleteTarget.productId)}) will be removed permanently.`
+                  : ""}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={isDeleting}
+                onClick={(e) => {
+                  e.preventDefault()
+                  if (deleteTarget) void handleDelete(deleteTarget.productId)
+                }}
+              >
+                {isDeleting ? "Deleting…" : "Delete"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DashboardLayout>
   )

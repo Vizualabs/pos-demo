@@ -2,9 +2,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import Login from "./pages/Login";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "./components/Auth/AuthProvider";
+import { AuthGate } from "./components/Auth/AuthGate";
 import { ProtectedRoute } from "./components/Auth/ProtectedRoute";
+import { RootRoute } from "./components/Auth/RootRoute";
+import { LoginRoute } from "./components/Auth/LoginRoute";
 import Dashboard from "./pages/Dashboard";
 import POS from "./pages/POS";
 import QRMenu from "./pages/QRMenu";
@@ -26,10 +29,12 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Navigate to="/pos" replace />} />
-          <Route path="/login" element={<Login />} />
+      <AuthProvider>
+        <BrowserRouter>
+          <AuthGate>
+            <Routes>
+          <Route path="/" element={<RootRoute />} />
+          <Route path="/login" element={<LoginRoute />} />
 
           <Route
             path="/dashboard"
@@ -129,9 +134,18 @@ const App = () => (
           />
 
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+          <Route
+            path="*"
+            element={
+              <ProtectedRoute>
+                <NotFound />
+              </ProtectedRoute>
+            }
+          />
+            </Routes>
+          </AuthGate>
+        </BrowserRouter>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
