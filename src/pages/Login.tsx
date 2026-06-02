@@ -1,5 +1,5 @@
 import { useState, FormEvent } from "react"
-import { useNavigate, useLocation } from "react-router-dom"
+import { useNavigate, useLocation, Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -7,8 +7,8 @@ import { Label } from "@/components/ui/label"
 import { AlertCircle, LogIn } from "lucide-react"
 import type { UserRole } from "@/hooks/useAuth"
 
-const LOGIN_API = "http://localhost:8080/api/security/login"
-const USER_DETAILS_API = "http://localhost:8080/api/security/user/details"
+const LOGIN_API = "/api/security/login"
+const USER_DETAILS_API = "/api/security/user/details"
 
 const MAX_USERNAME_LEN = 50
 const MAX_PASSWORD_LEN = 128
@@ -174,6 +174,15 @@ const Login = () => {
                 <LogIn className="w-4 h-4 mr-2" />
                 {isSubmitting ? "Signing in..." : "Sign In"}
               </Button>
+
+              <div className="text-center">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-green-400 hover:text-green-300 hover:underline transition-colors"
+                >
+                  Forgot Password?
+                </Link>
+              </div>
 
               <p className="text-center text-slate-500 text-xs mt-4">
                 Secure authentication • Your credentials are encrypted
