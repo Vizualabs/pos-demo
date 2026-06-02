@@ -17,7 +17,10 @@ export type ApiClientOptions = {
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
-  return baseUrl.replace(/\/+$/, "")
+  const trimmed = baseUrl.replace(/\/+$/, "")
+  // Be forgiving if someone sets VITE_API_BASE_URL to ".../api" — our fetch helpers already
+  // use "/api/..." paths, so keep base as host only.
+  return trimmed.replace(/\/api$/i, "")
 }
 
 export function getDefaultApiBaseUrl(): string {

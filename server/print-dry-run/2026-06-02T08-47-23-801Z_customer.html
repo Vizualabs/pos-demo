@@ -1,0 +1,200 @@
+<!DOCTYPE html><html><head>
+    <meta charset="utf-8" />
+    <title>Customer bill</title>
+    <style>
+      
+      @page { size: 80mm auto; margin: 2mm; }
+      html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+        width: 72mm;
+        max-width: 72mm;
+        margin: 0 auto;
+        padding: 2mm;
+        font-size: 11px;
+        box-sizing: border-box;
+      }
+      @media print {
+        html, body { height: auto !important; min-height: 0 !important; overflow: visible !important; }
+        body { margin: 0 auto; padding: 2mm; }
+      }
+
+      
+      .customer-print-section {
+        color: #000;
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        max-width: 68mm;
+        margin: 0 auto;
+        padding: 4px 2px;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      .c-header-block { text-align: center; padding: 8px 0 10px; }
+      .c-shop-name {
+        font-size: 20px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        margin: 0 0 8px;
+        line-height: 1.15;
+      }
+      .c-accent-bar {
+        width: 48px;
+        height: 3px;
+        background: #000;
+        margin: 0 auto;
+      }
+      .c-hr {
+        border: none;
+        border-top: 2px solid #000;
+        margin: 10px 0;
+        height: 0;
+      }
+      .c-meta-block, .c-customer-block, .c-sum-block, .c-payment-box {
+        margin: 4px 0;
+      }
+      .c-row, .c-sum-row, .c-count-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 8px;
+        margin: 4px 0;
+      }
+      .c-label { color: #000; font-weight: 500; }
+      .c-val { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+      .c-mono { font-family: ui-monospace, monospace; font-size: 0.92em; }
+      .c-inline { margin: 4px 0; line-height: 1.45; }
+      .c-inline .c-label { font-weight: 500; }
+      .c-inline .c-val { font-weight: 700; }
+      .c-col-head {
+        display: grid;
+        grid-template-columns: 1fr 2.2rem 4.5rem;
+        gap: 6px;
+        font-size: 10px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin: 8px 0 6px;
+        color: #000;
+      }
+      .c-col-qty { text-align: center; }
+      .c-col-amt { text-align: right; }
+      .c-items { margin: 6px 0; }
+      .c-item-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 8px;
+        margin: 10px 0;
+      }
+      .c-item-main { flex: 1; min-width: 0; }
+      .c-item-name {
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.25;
+        margin-bottom: 2px;
+        word-break: break-word;
+      }
+      .c-item-sub {
+        font-size: 12px;
+        font-weight: 500;
+        color: #000;
+        font-variant-numeric: tabular-nums;
+      }
+      .c-item-amt {
+        font-size: 14px;
+        font-weight: 800;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .c-sum-block { margin-top: 4px; }
+      .c-sum-row span:last-child { font-weight: 700; }
+      .c-sum-net {
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 2px solid #000;
+        font-size: 15px;
+        font-weight: 800;
+      }
+      .c-sum-net span:last-child { font-weight: 900; }
+      .c-payment-box {
+        border: 2px solid #000;
+        padding: 8px 10px;
+        margin: 8px 0;
+      }
+      .c-sum-due span:last-child { font-weight: 900; }
+      .c-count-row {
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .c-count-row strong { font-weight: 800; }
+      .c-thanks {
+        text-align: center;
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        margin: 10px 0 6px;
+      }
+      .c-credit {
+        text-align: center;
+        font-size: 10px;
+        font-weight: 500;
+        font-style: italic;
+        margin: 0;
+        color: #000;
+      }
+
+      body { font-size: 13px; color: #000; }
+    </style>
+  </head><body><div class="customer-print-section">
+    <div class="c-header-block">
+      <h1 class="c-shop-name">MADHARA RESTAURANT</h1>
+      <div class="c-accent-bar"></div>
+    </div>
+    <div class="c-hr"></div>
+    <div class="c-meta-block">
+      <div class="c-row"><span class="c-label">Invoice</span><span class="c-val">6</span></div>
+      <div class="c-row"><span class="c-label">Date & Time</span><span class="c-val c-mono">2026-06-02 • 02:17:21 pm</span></div>
+      <div class="c-row"><span class="c-label">Staff</span><span class="c-val">POS</span></div>
+    </div>
+    <div class="c-hr"></div>
+    <div class="c-customer-block">
+      <div class="c-inline"><span class="c-label">Customer:</span> <span class="c-val">— · Take away</span></div>
+      
+    </div>
+    <div class="c-hr"></div>
+    <div class="c-col-head">
+      <span>DESCRIPTION</span>
+      <span class="c-col-qty">QTY</span>
+      <span class="c-col-amt">AMOUNT</span>
+    </div>
+    <div class="c-items"><div class="c-item-row">
+      <div class="c-item-main">
+        <div class="c-item-name">Chicken Kottu (Small)</div>
+        <div class="c-item-sub">900.00 × 2</div>
+      </div>
+      <div class="c-item-amt">1,800.00</div>
+    </div><div class="c-item-row">
+      <div class="c-item-main">
+        <div class="c-item-name">Chicken Fried Rice (Small)</div>
+        <div class="c-item-sub">850.00 × 1</div>
+      </div>
+      <div class="c-item-amt">850.00</div>
+    </div></div>
+    <div class="c-hr"></div>
+    <div class="c-sum-block">
+      <div class="c-sum-row"><span>SUB TOTAL</span><span>2,650.00</span></div>
+      
+      <div class="c-sum-row c-sum-net"><span>NET TOTAL</span><span>2,650.00</span></div>
+    </div>
+    
+    <div class="c-hr"></div>
+    <div class="c-count-row">
+      <span>No of Items: <strong>2</strong></span>
+      <span>No of Pcs: <strong>3.0</strong></span>
+    </div>
+    <div class="c-hr"></div>
+    <p class="c-thanks">✦ THANK YOU COME AGAIN !!! ✦</p>
+    <p class="c-credit">Software by VIZUALABS | www.vizualabs.com</p>
+  </div></body></html>

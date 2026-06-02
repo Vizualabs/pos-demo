@@ -1,0 +1,99 @@
+<!DOCTYPE html><html><head>
+    <meta charset="utf-8" />
+    <title>Kitchen ticket</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+      
+      @page { size: 80mm auto; margin: 2mm; }
+      html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      body {
+        font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+        width: 72mm;
+        max-width: 72mm;
+        margin: 0 auto;
+        padding: 2mm;
+        font-size: 11px;
+        box-sizing: border-box;
+      }
+      @media print {
+        html, body { height: auto !important; min-height: 0 !important; overflow: visible !important; }
+        body { margin: 0 auto; padding: 2mm; }
+      }
+
+      
+  .kot-title {
+    font-size: 1.15rem;
+    letter-spacing: 0.3px;
+    border-bottom: 2px solid #000;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+    text-align: center;
+    font-weight: bold;
+  }
+  .kot-table {
+    font-size: 0.95rem;
+    line-height: 1.5;
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+  }
+  .kot-table th, .kot-table td {
+    text-align: left;
+    padding: 7px 4px;
+    border-bottom: 1px solid #eaeaea;
+  }
+  .kot-table th:nth-child(2), .kot-table td:nth-child(2) { text-align: center; }
+  .kot-table th:nth-child(3), .kot-table td:nth-child(3) { text-align: left; word-break: break-word; }
+  .kot-table th { font-weight: 600; }
+  .prep-note {
+    font-style: italic;
+    font-size: 0.8rem;
+    margin-top: 14px;
+    text-align: center;
+    border-top: 1px dashed #777;
+    padding-top: 8px;
+  }
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; background: #111; color: #fff; font-size: 0.85rem; margin: 8px 0; }
+  .kot-page { page-break-after: always; }
+  .kot-page:last-child { page-break-after: auto; }
+  .kot-single { page-break-after: auto; }
+  .kot-subtitle { font-size: 0.7rem; color: #666; text-align: center; margin: 4px 0 8px; }
+  .kot-meta { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 4px; font-size: 0.72rem; margin-top: 8px; color: #111; align-items: baseline; }
+  .kot-meta > span:nth-child(odd) { color: #555; }
+  .kot-meta > span:nth-child(even) { text-align: right; font-weight: 600; }
+
+      body { font-family: 'Noto Sans Sinhala', system-ui, sans-serif; font-size: 12px; }
+      .kot-title { font-size: 1.15rem; }
+      .kot-table { font-size: 0.95rem; line-height: 1.5; }
+      @media print {
+        .kot-single { page-break-after: auto; break-after: auto; }
+      }
+    </style>
+  </head><body><div class="kot-single">
+    <div class="kot-title">මුළුතැන්ගෙයි ඇණවුම</div>
+    <p class="kot-subtitle">(මිල ගණන් ඇතුළත් නොවේ)</p>
+    <div style="text-align:center"><span class="badge">කුස්සිය 1</span></div>
+    <div class="kot-meta">
+      <span>ඇණවුම් අංකය:</span><span style="text-align:right;font-family:monospace;font-weight:700">#6</span>
+      <span>මේස අංකය:</span><span style="text-align:right">—</span>
+      <span>ඇණවුම් වර්ගය:</span><span style="text-align:right">නිවසට ගෙන යාම</span>
+      <span>වේලාව:</span><span style="text-align:right">6/2/2026, 2:17:21 PM</span>
+    </div>
+    <table class="kot-table">
+      <thead><tr>
+        <th>අයිතමය / විස්තරය</th>
+        <th style="width:3rem">ප්‍රමාණය</th>
+        <th>විශේෂ සටහන්</th>
+      </tr></thead>
+      <tbody><tr>
+      <td>Chicken Kottu (කුඩා)</td>
+      <td style="font-size:1em;font-weight:700">2</td>
+      <td style="font-size:0.95em">—</td>
+    </tr><tr>
+      <td>Chicken Fried Rice (කුඩා)</td>
+      <td style="font-size:1em;font-weight:700">1</td>
+      <td style="font-size:0.95em">—</td>
+    </tr></tbody>
+    </table>
+    <p class="prep-note">මෙම පත්‍රිකාව ආහාර පිළියෙළ කිරීම සඳහා පමණි.</p>
+  </div></body></html>

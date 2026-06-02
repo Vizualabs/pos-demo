@@ -1,24 +1,33 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
+import axios, { AxiosHeaders, AxiosInstance, AxiosResponse, type InternalAxiosRequestConfig } from "axios"
 
-const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8081/api'
+// VITE_API_BASE_URL should be the host only (no trailing /api). Be forgiving if it's misconfigured.
+const apiHost = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8081")
+  .replace(/\/+$/, "")
+  .replace(/\/api$/i, "")
+const baseURL = `${apiHost}/api`
 
 const axiosClient: AxiosInstance = axios.create({  
   baseURL,
   timeout: 30000,
   withCredentials: true,
   headers: {
-    'Content-Type': 'application/json',
-    Accept: 'application/json'
-  }
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  },
 })
 
 const refreshClient = axios.create({ baseURL })
 
 axiosClient.interceptors.request.use(
-  (config: AxiosRequestConfig) => {
-    const token = localStorage.getItem('auth_token')
-    if (token && config.headers) {
-      (config.headers as any).Authorization = `Bearer ${token}`
+  (config: InternalAxiosRequestConfig) => {
+    const token = localStorage.getItem("auth_token")
+    if (token) {
+      if (config.headers instanceof AxiosHeaders) {
+        config.headers.set("Authorization", `Bearer ${token}`)
+      } else {
+        // axios may provide plain object headers depending on adapter/runtime
+        ;(config.headers as any).Authorization = `Bearer ${token}`
+      }
     }
     return config
   },
