@@ -26,6 +26,14 @@ export function getDefaultApiBaseUrl(): string {
   return ""
 }
 
+/** Turn `/api/...` into full URL when `VITE_API_BASE_URL` is set (e.g. http://34.29.70.169:8080/api). */
+export function resolveApiUrl(path: string): string {
+  if (path.startsWith("http://") || path.startsWith("https://")) return path
+  const base = getDefaultApiBaseUrl()
+  if (!base) return path
+  return `${base}${path.startsWith("/") ? "" : "/"}${path}`
+}
+
 export function getStoredAuthToken(): string | null {
   if (typeof window === "undefined") return null
   try {

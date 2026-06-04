@@ -36,6 +36,7 @@ import {
   Lock,
 } from "lucide-react"
 import { toast } from "sonner"
+import { resolveApiUrl } from "@/lib/apiClient"
 import {
   loadPrintPrinterConfig,
   savePrintPrinterConfig,
@@ -104,7 +105,7 @@ const Settings = () => {
   const fetchUserDetails = async (isLoading = true) => {
     if (isLoading) setUserDetailsLoading(true)
     try {
-      const response = await fetch("/api/security/user/details", {
+      const response = await fetch(resolveApiUrl("/api/security/user/details"), {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -140,7 +141,7 @@ const Settings = () => {
 
     setUserDetailsUpdating(true)
     try {
-      const response = await fetch("/api/security/user/updatedetails", {
+      const response = await fetch(resolveApiUrl("/api/security/user/updatedetails"), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -228,7 +229,7 @@ const Settings = () => {
 
     setPasswordLoading(true)
     try {
-      const response = await fetch("/api/security/update-password", {
+      const response = await fetch(resolveApiUrl("/api/security/update-password"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

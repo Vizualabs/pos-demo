@@ -1,6 +1,7 @@
 import { useState, FormEvent } from "react"
 import { Link } from "react-router-dom"
-import axios from "axios"
+import axios, { isAxiosError } from "axios"
+import axiosClient from "@/axios/client"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { AlertCircle, ArrowLeft, CheckCircle2, Mail, Send } from "lucide-react"
 import { AuthBackground } from "@/components/Auth/AuthBackground"
 
-const FORGOT_PASSWORD_API = "/api/security/forgot-password"
+const FORGOT_PASSWORD_API = "/security/forgot-password"
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -57,7 +58,7 @@ const ForgotPassword = () => {
       setEmail("")
     } catch (err) {
       let message = "Unable to send reset link. Please try again."
-      if (axios.isAxiosError(err)) {
+      if (isAxiosError(err)) {
         const status = err.response?.status
         const backendMessage = err.response?.data?.message
 

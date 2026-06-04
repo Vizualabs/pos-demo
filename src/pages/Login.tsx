@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AlertCircle, LogIn } from "lucide-react"
 import { useAuth, type UserRole } from "@/hooks/useAuth"
+import { resolveApiUrl } from "@/lib/apiClient"
 import { clearAuthSession, persistAuthSession } from "@/lib/authSession"
 import { AuthBackground } from "@/components/Auth/AuthBackground"
 
@@ -67,7 +68,7 @@ const Login = () => {
     setIsSubmitting(true)
 
     try {
-      const response = await fetch(LOGIN_API, {
+      const response = await fetch(resolveApiUrl(LOGIN_API), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -86,7 +87,7 @@ const Login = () => {
         localStorage.setItem("auth_token", data.token)
       }
 
-      const detailsResponse = await fetch(USER_DETAILS_API, {
+      const detailsResponse = await fetch(resolveApiUrl(USER_DETAILS_API), {
         method: "GET",
         headers: { "Content-Type": "application/json" },
         credentials: "include",

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, FormEvent } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
-import axios from "axios"
+import axios, { isAxiosError } from "axios"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 import { AuthBackground } from "@/components/Auth/AuthBackground"
 
-const RESET_PASSWORD_API = "/api/security/reset-password"
+const RESET_PASSWORD_API = "/security/reset-password"
 
 const MIN_PASSWORD_LEN = 6
 const MAX_PASSWORD_LEN = 128
@@ -100,7 +100,7 @@ const ResetPassword = () => {
       }, REDIRECT_DELAY_MS)
     } catch (err) {
       let message = "Unable to reset password. Please try again."
-      if (axios.isAxiosError(err)) {
+      if (isAxiosError(err)) {
         const status = err.response?.status
         const backendMessage = err.response?.data?.message
 
