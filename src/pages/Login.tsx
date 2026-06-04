@@ -1,11 +1,12 @@
-import { useState, FormEvent } from "react"
+import { useState, FormEvent, useEffect } from "react"
 import { useNavigate, useLocation, Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AlertCircle, LogIn } from "lucide-react"
-import type { UserRole } from "@/hooks/useAuth"
+import { useAuth, type UserRole } from "@/hooks/useAuth"
+import { clearAuthSession, persistAuthSession } from "@/lib/authSession"
 import { AuthBackground } from "@/components/Auth/AuthBackground"
 
 const LOGIN_API = "/api/security/login"
@@ -39,10 +40,18 @@ const getRoleFromUser = (user: any): UserRole => {
 const Login = () => {
   const navigate = useNavigate()
   const location = useLocation()
+  const { isAuthenticated, markAuthenticated } = useAuth()
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    const from = (location.state as { from?: unknown } | null)?.from
+    if (!from && !isAuthenticated) {
+      clearAuthSession()
+    }
+  }, [location.state, isAuthenticated])
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -95,8 +104,8 @@ const Login = () => {
         return
       }
 
-      localStorage.setItem("user", JSON.stringify(user))
-      localStorage.setItem("isLoggedIn", "true")
+      persistAuthSession(user, data.token)
+      markAuthenticated()
 
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname
       navigate(from || "/pos", { replace: true })
