@@ -1,4 +1,4 @@
-import { ReactElement } from "react"
+import { ReactElement, useEffect, useState } from "react"
 import { Navigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/hooks/useAuth"
 import type { UserRole } from "@/lib/authSession"
@@ -11,9 +11,22 @@ type ProtectedRouteProps = {
 
 export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
   const location = useLocation()
-  const { authReady, isAuthenticated, getUserRole } = useAuth()
+  const { authReady, isAuthenticated, getUserRole, refreshAuth } = useAuth()
+  const [routeVerified, setRouteVerified] = useState(false)
 
-  if (!authReady) {
+  useEffect(() => {
+    if (!authReady) return
+    let cancelled = false
+    setRouteVerified(false)
+    void refreshAuth().then(() => {
+      if (!cancelled) setRouteVerified(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [authReady, location.pathname, refreshAuth])
+
+  if (!authReady || !routeVerified) {
     return <AuthGate>{null}</AuthGate>
   }
 
