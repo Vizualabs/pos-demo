@@ -1,3 +1,5 @@
+import { resolveApiUrl } from "@/lib/apiClient"
+
 export type UserRole = "ADMIN" | "USER" | "GUEST"
 
 const USER_DETAILS_API = "/api/security/user/details"
@@ -115,7 +117,7 @@ export async function verifySessionWithServer(): Promise<boolean> {
   if (token) headers.Authorization = `Bearer ${token}`
 
   try {
-    const res = await fetch(USER_DETAILS_API, {
+    const res = await fetch(resolveApiUrl(USER_DETAILS_API), {
       method: "GET",
       credentials: "include",
       headers,

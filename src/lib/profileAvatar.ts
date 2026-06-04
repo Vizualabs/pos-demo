@@ -1,3 +1,4 @@
+import { resolveApiUrl } from "@/lib/apiClient"
 import { getAuthToken } from "@/lib/authSession"
 
 export const PROFILE_AVATAR_STORAGE_KEY = "posProfileAvatar"
@@ -13,8 +14,8 @@ export function normalizeProfileImageUrl(url: string): string {
   if (trimmed.startsWith("data:") || trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     return trimmed
   }
-  if (trimmed.startsWith("/api/")) return trimmed
-  if (trimmed.startsWith("/files/")) return `/api${trimmed}`
+  if (trimmed.startsWith("/api/")) return resolveApiUrl(trimmed)
+  if (trimmed.startsWith("/files/")) return resolveApiUrl(`/api${trimmed}`)
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`
 }
 
@@ -112,7 +113,7 @@ export async function uploadProfileAvatar(file: File): Promise<{ url: string; sa
     const form = new FormData()
     form.append(field, file)
     try {
-      const res = await fetch(path, {
+      const res = await fetch(resolveApiUrl(path), {
         method: "POST",
         credentials: "include",
         headers: authHeaders,
