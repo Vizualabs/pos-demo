@@ -612,12 +612,12 @@ const Settings = () => {
       {/* Logout Confirmation Dialog */}
       <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
         <AlertDialogContent className="max-w-sm rounded-3xl border border-border/50 shadow-2xl bg-background p-0 overflow-hidden">
-          <div className="h-1.5 w-full bg-gradient-to-r from-red-500 via-rose-500 to-red-600" />
+          <div className="h-1.5 w-full bg-gradient-to-r from-green-500 via-emerald-500 to-green-600" />
 
           <div className="p-7">
             <AlertDialogHeader className="text-center items-center gap-0 mb-4">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-red-500/20 to-rose-600/20 flex items-center justify-center mb-5 ring-4 ring-red-500/10">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center shadow-lg shadow-red-500/30">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-green-500/20 to-emerald-600/20 flex items-center justify-center mb-5 ring-4 ring-green-500/10">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-lg shadow-green-500/30">
                   <LogOut className="w-5 h-5 text-white" />
                 </div>
               </div>
@@ -634,7 +634,7 @@ const Settings = () => {
             <AlertDialogFooter className="flex-col gap-3 mt-6 sm:flex-col">
               <AlertDialogAction
                 onClick={handleLogout}
-                className="w-full h-11 rounded-xl"
+                className="w-full h-11 rounded-xl bg-success hover:bg-success/90 text-success-foreground font-semibold transition-all duration-200"
               >
                 <LogOut className="w-4 h-4 mr-2" />
                 Yes, Logout
