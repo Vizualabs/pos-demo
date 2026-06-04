@@ -1,6 +1,8 @@
-import { ReactElement } from "react"
+import { ReactElement, useEffect, useState } from "react"
 import { Navigate, useLocation } from "react-router-dom"
-import { useAuth, type UserRole } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/useAuth"
+import type { UserRole } from "@/lib/authSession"
+import { AuthGate } from "@/components/Auth/AuthGate"
 
 type ProtectedRouteProps = {
   children: ReactElement
@@ -9,10 +11,27 @@ type ProtectedRouteProps = {
 
 export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
   const location = useLocation()
-  const { getUserRole, isLoggedIn } = useAuth()
+  const { authReady, isAuthenticated, getUserRole, refreshAuth } = useAuth()
+  const [routeVerified, setRouteVerified] = useState(false)
 
-  if (!isLoggedIn()) {
-    return <Navigate to="/login" replace state={{ from: location }} />
+  useEffect(() => {
+    if (!authReady) return
+    let cancelled = false
+    setRouteVerified(false)
+    void refreshAuth().then(() => {
+      if (!cancelled) setRouteVerified(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [authReady, location.pathname, refreshAuth])
+
+  if (!authReady || !routeVerified) {
+    return <AuthGate>{null}</AuthGate>
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/" replace state={{ from: location }} />
   }
 
   const role = getUserRole()

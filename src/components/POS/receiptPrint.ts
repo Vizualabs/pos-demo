@@ -1,5 +1,5 @@
-import { formatCurrency } from "@/lib/utils"
 import type { Kitchen } from "@/lib/ordersApi"
+import { getBrandLogoForEmbed } from "@/lib/brandLogo"
 import { loadPrintPrinterConfig } from "@/lib/printConfig"
 import { printHtmlViaQz } from "@/lib/qzPrintClient"
 import { postPrintToAgent } from "@/lib/httpPrintAgent"
@@ -65,23 +65,54 @@ const kotLabels = {
   prepNote: "මෙම පත්‍රිකාව ආහාර පිළියෙළ කිරීම සඳහා පමණි.",
 }
 
-/** Labels for customer receipt preview dialog (shared with printed HTML). */
+/** Labels for customer receipt preview + thermal print (shared). */
 export const customerReceiptDialogLabels = {
-  restaurant: "Restaurant",
-  receipt: "Customer receipt",
-  date: "Date",
-  orderNo: "Order #",
+  restaurant: "Madhara Restaurant",
+  receipt: "Customer Receipt",
+  invoice: "Invoice",
+  dateTime: "Date & Time",
+  staff: "Staff",
+  customer: "Customer",
+  payment: "Payment",
+  description: "Description",
+  qty: "Qty",
+  amount: "Amount",
+  subTotal: "Sub Total",
+  tax: "Tax",
+  netTotal: "Net Total",
+  paidAmount: "Paid Amount",
+  balance: "Balance",
+  dueAmount: "Due Amount",
+  noOfItems: "No of Items",
+  noOfPcs: "No of Pcs",
+  thanks: "THANK YOU COME AGAIN !!!",
+  softwareCredit: "Software by VIZUALABS | www.vizualabs.com",
+  /** @deprecated use invoice */
+  orderNo: "Invoice",
+  date: "Date & Time",
   table: "Table",
   orderType: "Order type",
-  payment: "Payment",
-  item: "Item",
-  qty: "Qty",
+  item: "Description",
   unit: "Unit",
-  amount: "Amount",
-  sub: "Subtotal",
-  tax: "Tax (10%)",
-  grand: "Total",
-  thanks: "Thank you — please visit again.",
+  sub: "Sub Total",
+  grand: "Net Total",
+}
+
+/** Plain amount for thermal lines (no currency prefix). */
+export function formatReceiptAmount(amount: number): string {
+  return amount.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function formatReceiptDateTime(d: Date): { date: string; time: string } {
+  return {
+    date: d.toLocaleDateString("en-CA"),
+    time: d.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+    }),
+  }
 }
 
 function kotLineDisplay(line: KitchenTicketLine) {
@@ -110,58 +141,151 @@ function lineDisplayName(line: ReceiptLine): string {
   return line.portion ? `${line.name} (${line.portion})` : line.name
 }
 
-/** Build bill HTML from data so print does not rely on portaled dialog DOM (fixes empty / failed print). */
-function buildCustomerBillHtml(customer: CustomerBillPayload, d: Date): string {
-  const rows = customer.lines
-    .map(
-      (line) => `<tr>
-      <td class="c-item">${escapeHtml(lineDisplayName(line))}</td>
-      <td class="c-qty">${line.qty}</td>
-      <td class="c-money">${formatCurrency(line.unitPrice)}</td>
-      <td class="c-money c-strong">${formatCurrency(line.lineTotal)}</td>
-    </tr>`,
-    )
-    .join("")
-  const paymentRow = customer.paymentLabel.trim()
-    ? `<div class="meta-row"><span class="meta-k">${customerReceiptDialogLabels.payment}</span><span class="meta-v">${escapeHtml(customer.paymentLabel)}</span></div>`
-    : ""
-  return `<div class="customer-print-section">
-    <div class="c-header">
-      <div class="c-brand">
-        <div class="c-brand-name">${customerReceiptDialogLabels.restaurant}</div>
-        <div class="c-brand-sub">${customerReceiptDialogLabels.receipt}</div>
-      </div>
-      <div class="c-rule"></div>
-      <div class="meta">
-        <div class="meta-row"><span class="meta-k">${customerReceiptDialogLabels.date}</span><span class="meta-v">${escapeHtml(d.toLocaleString())}</span></div>
-        <div class="meta-row"><span class="meta-k">${customerReceiptDialogLabels.orderNo}</span><span class="meta-v mono">#${customer.orderId}</span></div>
-        <div class="meta-row"><span class="meta-k">${customerReceiptDialogLabels.table}</span><span class="meta-v">${escapeHtml(customer.tableLabel)}</span></div>
-        <div class="meta-row"><span class="meta-k">${customerReceiptDialogLabels.orderType}</span><span class="meta-v">${escapeHtml(customer.orderTypeLabel)}</span></div>
-        ${paymentRow}
-      </div>
-    </div>
-    <table>
-      <thead><tr>
-        <th>${customerReceiptDialogLabels.item}</th>
-        <th style="width:2.5rem;text-align:center">${customerReceiptDialogLabels.qty}</th>
-        <th style="text-align:right">${customerReceiptDialogLabels.unit}</th>
-        <th style="text-align:right">${customerReceiptDialogLabels.amount}</th>
-      </tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
-    <div class="totals">
-      ${
-        customer.taxAmount > 0
-          ? `<div class="total-row"><span>${customerReceiptDialogLabels.sub}</span><span>${formatCurrency(customer.subtotal)}</span></div>
-      <div class="total-row"><span>${customerReceiptDialogLabels.tax}</span><span>${formatCurrency(customer.taxAmount)}</span></div>
-      <div class="grand-row"><span>${customerReceiptDialogLabels.grand}</span><span>${formatCurrency(customer.total)}</span></div>`
-          : `<div class="grand-row"><span>${customerReceiptDialogLabels.grand}</span><span>${formatCurrency(customer.total)}</span></div>`
-      }
-    </div>
-    <div class="c-rule dotted"></div>
-    <p class="c-footer">${customerReceiptDialogLabels.thanks}</p>
+function receiptHr(thin = false): string {
+  return `<div class="c-hr${thin ? " c-hr-thin" : ""}"></div>`
+}
+
+function buildReceiptLogoHtml(logoDataUrl: string | null): string {
+  if (!logoDataUrl) return ""
+  return `<div class="c-logo-wrap">
+    <img src="${logoDataUrl}" alt="" class="c-logo" />
   </div>`
 }
+
+/** Black-only 80mm thermal bill — matches CustomerBillPreview layout. */
+function buildCustomerBillHtml(
+  customer: CustomerBillPayload,
+  d: Date,
+  logoDataUrl: string | null = null,
+): string {
+  const L = customerReceiptDialogLabels
+  const { date, time } = formatReceiptDateTime(d)
+  const itemCount = customer.lines.length
+  const pieceCount = customer.lines.reduce((s, line) => s + line.qty, 0)
+  const customerLabel =
+    [customer.tableLabel, customer.orderTypeLabel].filter(Boolean).join(" · ") || "WALK-IN"
+  const pending = customer.paymentLabel.toLowerCase().includes("pending")
+  const paidAmount = pending ? 0 : customer.total
+  const dueAmount = pending ? customer.total : 0
+
+  const itemRows = customer.lines
+    .map(
+      (line) => `<div class="c-item-row">
+      <div class="c-item-main">
+        <div class="c-item-name">${escapeHtml(lineDisplayName(line))}</div>
+        <div class="c-item-sub">${formatReceiptAmount(line.unitPrice)} × ${line.qty}</div>
+      </div>
+      <div class="c-item-amt">${formatReceiptAmount(line.lineTotal)}</div>
+    </div>`,
+    )
+    .join("")
+
+  const taxBlock =
+    customer.taxAmount > 0
+      ? `<div class="c-sum-row"><span>${L.subTotal}</span><span>${formatReceiptAmount(customer.subtotal)}</span></div>
+      <div class="c-sum-row"><span>${L.tax}</span><span>${formatReceiptAmount(customer.taxAmount)}</span></div>`
+      : ""
+
+  const paymentBlock = customer.paymentLabel.trim()
+    ? `${receiptHr()}
+    <div class="c-pay-block">
+      <div class="c-sum-row"><span>${L.paidAmount}</span><span>${formatReceiptAmount(paidAmount)}</span></div>
+      <div class="c-sum-row"><span>${L.balance}</span><span>${formatReceiptAmount(0)}</span></div>
+      <div class="c-sum-row c-sum-due"><span>${L.dueAmount}</span><span>${formatReceiptAmount(dueAmount)}</span></div>
+    </div>`
+    : ""
+
+  return `<div class="customer-print-section">
+    <div class="c-top">
+      ${buildReceiptLogoHtml(logoDataUrl)}
+      <div class="c-restaurant">${escapeHtml(L.restaurant.toUpperCase())}</div>
+      <div class="c-head-rule"></div>
+    </div>
+    <div class="c-body">
+      <div class="c-meta">
+        <div class="c-meta-row"><span>${L.invoice}</span><span class="c-meta-v">${customer.orderId}</span></div>
+        <div class="c-meta-row"><span>${L.dateTime}</span><span class="c-meta-v c-meta-sm">${escapeHtml(date)} · ${escapeHtml(time)}</span></div>
+        <div class="c-meta-row"><span>${L.staff}</span><span class="c-meta-v">POS</span></div>
+      </div>
+      ${receiptHr()}
+      <div class="c-meta">
+        <div class="c-meta-row"><span>${L.customer}</span><span class="c-meta-v">${escapeHtml(customerLabel)}</span></div>
+        ${
+          customer.paymentLabel.trim()
+            ? `<div class="c-meta-row"><span>${L.payment}</span><span class="c-meta-v">${escapeHtml(customer.paymentLabel)}</span></div>`
+            : ""
+        }
+      </div>
+      ${receiptHr()}
+      <div class="c-items-head">
+        <span>${L.description}</span>
+        <span class="c-col-qty">${L.qty}</span>
+        <span class="c-col-amt">${L.amount}</span>
+      </div>
+      <div class="c-items">${itemRows}</div>
+      ${receiptHr()}
+      <div class="c-summary">
+        ${taxBlock}
+        <div class="c-net-row"><span>${L.netTotal}</span><span>${formatReceiptAmount(customer.total)}</span></div>
+      </div>
+      ${paymentBlock}
+      ${receiptHr()}
+      <div class="c-stats">
+        <span>${L.noOfItems}: <strong>${itemCount}</strong></span>
+        <span>${L.noOfPcs}: <strong>${pieceCount.toFixed(1)}</strong></span>
+      </div>
+      ${receiptHr()}
+      <div class="c-foot">
+        <p class="c-thanks">${escapeHtml(L.thanks)}</p>
+        <p class="c-credit">${escapeHtml(L.softwareCredit)}</p>
+      </div>
+    </div>
+  </div>`
+}
+
+/** Same HTML as thermal print — loads logo when possible */
+export async function buildCustomerBillBodyHtml(
+  customer: CustomerBillPayload,
+  d: Date,
+): Promise<string> {
+  const logo = await getBrandLogoForEmbed()
+  return buildCustomerBillHtml(customer, d, logo?.dataUrl ?? null)
+}
+
+/** Black-only styles for preview + print document */
+export const CUSTOMER_BILL_PRINT_STYLES = `
+  .customer-print-section { color: #000; font-family: system-ui, -apple-system, Segoe UI, sans-serif; font-size: 11px; line-height: 1.35; }
+  .c-top { text-align: center; padding: 4px 4px 8px; border-bottom: 2px solid #000; }
+  .c-logo-wrap { padding: 4px 0 6px; }
+  .c-logo { display: block; margin: 0 auto; width: 22mm; max-width: 72%; height: auto; max-height: 18mm; object-fit: contain; filter: grayscale(100%) contrast(1.15); }
+  .c-restaurant { font-size: 15px; font-weight: 800; letter-spacing: 0.5px; }
+  .c-head-rule { width: 28px; height: 2px; background: #000; margin: 6px auto 0; }
+  .c-body { padding: 8px 2px 4px; }
+  .c-hr { border-top: 2px solid #000; margin: 8px 0; opacity: 0.15; }
+  .c-hr-thin { border-top-width: 1px; margin: 6px 0; }
+  .c-meta { font-size: 10px; }
+  .c-meta-row { display: flex; justify-content: space-between; gap: 6px; padding: 2px 0; }
+  .c-meta-v { font-weight: 700; text-align: right; }
+  .c-meta-sm { font-size: 9px; font-weight: 600; }
+  .c-items-head { display: grid; grid-template-columns: 1fr 2.2rem 3.5rem; gap: 4px; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; padding-bottom: 4px; border-bottom: 1px solid #000; }
+  .c-col-qty { text-align: center; }
+  .c-col-amt { text-align: right; }
+  .c-items { margin-top: 4px; }
+  .c-item-row { display: flex; justify-content: space-between; gap: 6px; padding: 5px 0; border-bottom: 1px solid #e5e5e5; }
+  .c-item-row:last-child { border-bottom: none; }
+  .c-item-name { font-size: 11px; font-weight: 700; }
+  .c-item-sub { font-size: 9px; color: #333; margin-top: 1px; }
+  .c-item-amt { font-size: 11px; font-weight: 800; white-space: nowrap; }
+  .c-summary { font-size: 10px; }
+  .c-sum-row { display: flex; justify-content: space-between; padding: 2px 0; }
+  .c-net-row { display: flex; justify-content: space-between; padding: 6px 0 2px; margin-top: 4px; border-top: 2px solid #000; font-size: 12px; font-weight: 900; }
+  .c-pay-block { padding: 6px 0; border: 1px dashed #666; margin-top: 4px; }
+  .c-sum-due span:last-child { font-weight: 900; }
+  .c-stats { display: flex; justify-content: space-between; font-size: 9px; font-weight: 600; }
+  .c-foot { text-align: center; padding-top: 4px; }
+  .c-thanks { font-size: 10px; font-weight: 800; margin: 0 0 4px; letter-spacing: 0.3px; }
+  .c-credit { font-size: 8px; color: #333; margin: 0; font-style: italic; }
+`
 
 /** Matches index.css — embedded in print popup so styles apply without Tailwind */
 const KOT_PRINT_STYLES = `
@@ -267,29 +391,11 @@ function buildPrintDocumentHtmlCustomerOnly(customerHtml: string): string {
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
       ${THERMAL_BASE_STYLES}
-      .customer-print-section { color: #111; }
-      .c-brand { text-align: center; }
-      .c-brand-name { font-weight: 800; font-size: 14px; letter-spacing: 0.2px; margin: 0; }
-      .c-brand-sub { font-size: 10px; color: #666; margin-top: 2px; }
-      /* Center the header blocks like the KOT look */
-      .c-rule { height: 1px; background: #e9e9e9; margin: 8px auto; max-width: 66mm; }
-      .c-rule.dotted { background: none; border-top: 1px dashed #8c8c8c; height: 0; margin: 10px auto 8px; max-width: 66mm; }
-      .meta { font-size: 10px; max-width: 66mm; margin: 0 auto; }
-      .meta-row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
-      .meta-k { color: #555; }
-      .meta-v { text-align: right; font-weight: 600; }
-      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace; }
-      .customer-print-section table { width: 100%; border-collapse: collapse; font-size: 10px; margin: 10px auto 0; }
-      .customer-print-section thead th { font-weight: 700; color: #333; padding: 6px 0 5px; border-bottom: 1px solid #dcdcdc; }
-      .customer-print-section tbody td { padding: 7px 0; border-bottom: 1px solid #efefef; vertical-align: top; }
-      .c-item { padding-right: 6px; }
-      .c-qty { width: 2.5rem; text-align: center; font-weight: 700; }
-      .c-money { text-align: right; white-space: nowrap; }
-      .c-strong { font-weight: 800; }
-      .totals { margin: 10px auto 0; padding-top: 8px; border-top: 1px solid #dcdcdc; font-size: 11px; max-width: 66mm; }
-      .total-row { display: flex; justify-content: space-between; padding: 2px 0; color: #333; }
-      .grand-row { display: flex; justify-content: space-between; padding-top: 6px; font-size: 14px; font-weight: 900; }
-      .c-footer { text-align: center; font-size: 10px; color: #666; margin: 0; }
+      ${CUSTOMER_BILL_PRINT_STYLES}
+      @media print {
+        .c-hr { border-color: #000 !important; opacity: 1 !important; }
+        .c-item-row { border-color: #ccc !important; }
+      }
     </style>
   </head><body>${customerHtml}</body></html>`
 }
@@ -456,9 +562,14 @@ function runPrintJobsSequential(
 }
 
 /** Customer bill only — send to customer / cashier printer (80mm). */
-export function printCustomerBillOnly(customer: CustomerBillPayload, d: Date = new Date()): void {
+export async function printCustomerBillOnly(
+  customer: CustomerBillPayload,
+  d: Date = new Date(),
+): Promise<void> {
   const cfg = loadPrintPrinterConfig()
-  runPrint(buildPrintDocumentHtmlCustomerOnly(buildCustomerBillHtml(customer, d)), undefined, {
+  const logo = await getBrandLogoForEmbed()
+  const html = buildPrintDocumentHtmlCustomerOnly(buildCustomerBillHtml(customer, d, logo?.dataUrl ?? null))
+  runPrint(html, undefined, {
     printerName: cfg.customerPrinterName,
   })
 }
@@ -485,14 +596,17 @@ export function printKitchenTicketsForStationsSequentially(
  * Kitchen jobs use iframe printing so the browser does not block popups after the first dialog.
  * @param onAllComplete — run after every job finishes (e.g. close UI).
  */
-export function printCustomerBillAndKitchenTickets(
+export async function printCustomerBillAndKitchenTickets(
   customer: CustomerBillPayload,
   tickets: KitchenTicketPayload[],
   d: Date,
   onAllComplete?: () => void,
-) {
+): Promise<void> {
   const cfg = loadPrintPrinterConfig()
-  const customerDoc = buildPrintDocumentHtmlCustomerOnly(buildCustomerBillHtml(customer, d))
+  const logo = await getBrandLogoForEmbed()
+  const customerDoc = buildPrintDocumentHtmlCustomerOnly(
+    buildCustomerBillHtml(customer, d, logo?.dataUrl ?? null),
+  )
   const kotJobs = tickets.map((t) => ({
     html: buildPrintDocumentHtmlKotSingle(renderKotInnerHtml(t, d)),
     printerName: kitchenPrinterName(t.kitchen),

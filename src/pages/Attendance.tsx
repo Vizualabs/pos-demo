@@ -224,9 +224,9 @@ const Attendance = () => {
     });
   }, [employees, records, payrollMonth]);
 
-  const downloadSlip = (row: (typeof payrollRows)[number]) => {
+  const downloadSlip = async (row: (typeof payrollRows)[number]) => {
     try {
-      generateSalarySlipPdf({
+      await generateSalarySlipPdf({
         employeeName: row.emp.name,
         employeeId: row.emp.employeeId,
         role: row.emp.role,
