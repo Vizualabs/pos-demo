@@ -30,6 +30,11 @@ export const getRoleFromStoredUser = (user: unknown): UserRole => {
 
   if (!roleNames.length && u.role) roleNames.push(normalizeRole(u.role))
 
+  if (!roleNames.length && typeof u.roles === "string") {
+    const matches = u.roles.match(/ROLE_[A-Z_]+/g) ?? []
+    for (const m of matches) roleNames.push(normalizeRole(m))
+  }
+
   if (!roleNames.length && Array.isArray(u.roles)) {
     for (const r of u.roles) {
       if (typeof r === "string") roleNames.push(normalizeRole(r))
@@ -44,6 +49,19 @@ export const getRoleFromStoredUser = (user: unknown): UserRole => {
   if (filtered.includes("ADMIN")) return "ADMIN"
   if (filtered.includes("USER")) return "USER"
   return "GUEST"
+}
+
+/** Normalize Spring login JSON when `/user/details` is unavailable. */
+export const userFromLoginResponse = (data: unknown): Record<string, unknown> => {
+  if (!data || typeof data !== "object") return {}
+  const d = data as Record<string, unknown>
+  if (d.user && typeof d.user === "object") return d.user as Record<string, unknown>
+  return {
+    username: d.username,
+    userId: d.userId,
+    roles: d.roles,
+    role: d.role,
+  }
 }
 
 export const getAuthToken = (): string | null => {
