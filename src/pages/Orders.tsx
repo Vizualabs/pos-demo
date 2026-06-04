@@ -781,9 +781,14 @@ type DraftNewLine = {
 
 type DraftLine = DraftExistingLine | DraftNewLine
 
+function parsePortionSelectValue(v: string): PortionType | null {
+  if (v === "SMALL" || v === "MEDIUM" || v === "LARGE") return v
+  return null
+}
+
 function unitPriceForOrderLine(product: ProductResponseDto, portion: PortionType | null): number {
   if (!product.hasPortionPricing) return product.sellingPrice
-  if (portion === "MEDIUM" || portion === "LARGE") {
+  if (portion === "SMALL" || portion === "MEDIUM" || portion === "LARGE") {
     const v = product.portionPrices?.[portion]
     if (typeof v === "number" && Number.isFinite(v)) return v
   }
@@ -928,8 +933,13 @@ function EditOrderDialog({
           return
         }
         const p = products.find((x) => x.productId === line.productId)
-        if (p?.hasPortionPricing && (line.portionType !== "MEDIUM" && line.portionType !== "LARGE")) {
-          toast.error("Select Medium or Large for portion-priced products.")
+        if (
+          p?.hasPortionPricing &&
+          line.portionType !== "SMALL" &&
+          line.portionType !== "MEDIUM" &&
+          line.portionType !== "LARGE"
+        ) {
+          toast.error("Select Small, Medium, or Large for portion-priced products.")
           return
         }
       }
@@ -1083,11 +1093,9 @@ function EditOrderDialog({
                             <select
                               className="h-9 rounded-md border border-input bg-background px-2 text-sm"
                               value={line.portionType ?? "MEDIUM"}
-                              onChange={(e) => {
-                                const v = e.target.value
-                                updateLinePortion(idx, v === "MEDIUM" || v === "LARGE" ? v : null)
-                              }}
+                              onChange={(e) => updateLinePortion(idx, parsePortionSelectValue(e.target.value))}
                             >
+                              <option value="SMALL">Small</option>
                               <option value="MEDIUM">Medium</option>
                               <option value="LARGE">Large</option>
                             </select>
@@ -1132,12 +1140,10 @@ function EditOrderDialog({
                             <Label className="text-xs text-muted-foreground">Portion</Label>
                             <select
                               className="h-9 rounded-md border border-input bg-background px-2 text-sm"
-                              value={line.portionType ?? ""}
-                              onChange={(e) => {
-                                const v = e.target.value
-                                updateNewLinePortion(idx, v === "MEDIUM" || v === "LARGE" ? v : null)
-                              }}
+                              value={line.portionType ?? "MEDIUM"}
+                              onChange={(e) => updateNewLinePortion(idx, parsePortionSelectValue(e.target.value))}
                             >
+                              <option value="SMALL">Small</option>
                               <option value="MEDIUM">Medium</option>
                               <option value="LARGE">Large</option>
                             </select>
