@@ -1,26 +1,16 @@
-<<<<<<< HEAD
 import { useState, FormEvent, useEffect } from "react"
-import { clearAuthSession, persistAuthSession } from "@/lib/authSession"
-import { useAuth } from "@/hooks/useAuth"
-import { useNavigate, useLocation } from "react-router-dom"
-=======
-import { useState, FormEvent } from "react"
 import { useNavigate, useLocation, Link } from "react-router-dom"
->>>>>>> origin/main
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AlertCircle, LogIn } from "lucide-react"
-import type { UserRole } from "@/hooks/useAuth"
+import { useAuth, type UserRole } from "@/hooks/useAuth"
+import { clearAuthSession, persistAuthSession } from "@/lib/authSession"
 import { AuthBackground } from "@/components/Auth/AuthBackground"
 
 const LOGIN_API = "/api/security/login"
 const USER_DETAILS_API = "/api/security/user/details"
-<<<<<<< HEAD
-const RESET_PASSWORD_API = "/api/security/reset-password"
-=======
->>>>>>> origin/main
 
 const MAX_USERNAME_LEN = 50
 const MAX_PASSWORD_LEN = 128

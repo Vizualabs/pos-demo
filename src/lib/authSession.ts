@@ -1,6 +1,8 @@
 export type UserRole = "ADMIN" | "USER" | "GUEST"
 
 const USER_DETAILS_API = "/api/security/user/details"
+/** Tab session only — survives refresh, cleared when tab closes or on logout */
+const BROWSER_SESSION_KEY = "pos_auth_session"
 
 const normalizeRole = (role: unknown): string =>
   String(role ?? "")
@@ -47,9 +49,25 @@ export const getAuthToken = (): string | null => {
   return localStorage.getItem("auth_token") ?? localStorage.getItem("token")
 }
 
+export const hasActiveBrowserSession = (): boolean => {
+  if (typeof window === "undefined") return false
+  return sessionStorage.getItem(BROWSER_SESSION_KEY) === "1"
+}
+
+export const markBrowserSessionActive = (): void => {
+  if (typeof window === "undefined") return
+  sessionStorage.setItem(BROWSER_SESSION_KEY, "1")
+}
+
+export const clearBrowserSession = (): void => {
+  if (typeof window === "undefined") return
+  sessionStorage.removeItem(BROWSER_SESSION_KEY)
+}
+
 /** Quick local check only — use with Spring Boot verify before trusting session */
 export const hasValidAuthSession = (): boolean => {
   if (typeof window === "undefined") return false
+  if (!hasActiveBrowserSession()) return false
   if (localStorage.getItem("isLoggedIn") !== "true") return false
 
   try {
@@ -63,6 +81,7 @@ export const hasValidAuthSession = (): boolean => {
 }
 
 export const persistAuthSession = (user: unknown, token?: string | null): void => {
+  markBrowserSessionActive()
   localStorage.setItem("user", JSON.stringify(user))
   localStorage.setItem("isLoggedIn", "true")
   if (token) {
@@ -72,6 +91,7 @@ export const persistAuthSession = (user: unknown, token?: string | null): void =
 }
 
 export const clearAuthSession = (): void => {
+  clearBrowserSession()
   localStorage.removeItem("isLoggedIn")
   localStorage.removeItem("user")
   localStorage.removeItem("token")
