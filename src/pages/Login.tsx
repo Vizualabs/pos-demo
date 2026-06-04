@@ -5,9 +5,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { AlertCircle, LogIn } from "lucide-react"
-import { useAuth, type UserRole } from "@/hooks/useAuth"
+import { useAuth } from "@/hooks/useAuth"
 import { resolveApiUrl } from "@/lib/apiClient"
-import { clearAuthSession, persistAuthSession } from "@/lib/authSession"
+import {
+  clearAuthSession,
+  getRoleFromStoredUser,
+  persistAuthSession,
+  userFromLoginResponse,
+} from "@/lib/authSession"
 import { AuthBackground } from "@/components/Auth/AuthBackground"
 
 const LOGIN_API = "/api/security/login"
@@ -15,28 +20,6 @@ const USER_DETAILS_API = "/api/security/user/details"
 
 const MAX_USERNAME_LEN = 50
 const MAX_PASSWORD_LEN = 128
-
-const getRoleFromUser = (user: any): UserRole => {
-  const normalizeRole = (role: unknown) =>
-    String(role ?? "")
-      .trim()
-      .toUpperCase()
-      .replace(/^ROLE_/, "")
-
-  const roles = [
-    normalizeRole(user?.role),
-    ...(Array.isArray(user?.authorities)
-      ? user.authorities.map((auth: any) => normalizeRole(typeof auth === "string" ? auth : auth?.authority || auth?.name || auth?.role))
-      : []),
-    ...(Array.isArray(user?.roles)
-      ? user.roles.map((role: any) => normalizeRole(typeof role === "string" ? role : role?.name || role?.authority || role?.role))
-      : []),
-  ].filter(Boolean)
-
-  if (roles.includes("ADMIN")) return "ADMIN"
-  if (roles.includes("USER")) return "USER"
-  return "GUEST"
-}
 
 const Login = () => {
   const navigate = useNavigate()
@@ -82,19 +65,30 @@ const Login = () => {
       }
 
       const data = await response.json().catch(() => ({}))
-      if (data.token) {
-        localStorage.setItem("token", data.token)
-        localStorage.setItem("auth_token", data.token)
+      const token =
+        (typeof data.token === "string" && data.token) ||
+        (typeof data.access_token === "string" && data.access_token) ||
+        null
+      if (token) {
+        localStorage.setItem("token", token)
+        localStorage.setItem("auth_token", token)
       }
+
+      const detailsHeaders: Record<string, string> = {
+        Accept: "application/json",
+      }
+      if (token) detailsHeaders.Authorization = `Bearer ${token}`
 
       const detailsResponse = await fetch(resolveApiUrl(USER_DETAILS_API), {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: detailsHeaders,
         credentials: "include",
       })
 
-      const user = detailsResponse.ok ? await detailsResponse.json().catch(() => data.user || data) : data.user || data
-      const role = getRoleFromUser(user)
+      const user = detailsResponse.ok
+        ? await detailsResponse.json().catch(() => userFromLoginResponse(data))
+        : userFromLoginResponse(data)
+      const role = getRoleFromStoredUser(user)
 
       if (role === "GUEST") {
         setError("Login succeeded, but no valid user role was found.")
@@ -105,7 +99,7 @@ const Login = () => {
         return
       }
 
-      persistAuthSession(user, data.token)
+      persistAuthSession(user, token)
       markAuthenticated()
 
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname
