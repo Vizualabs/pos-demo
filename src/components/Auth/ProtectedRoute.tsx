@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router-dom"
 import { useAuth } from "@/hooks/useAuth"
 import type { UserRole } from "@/lib/authSession"
 import { AuthGate } from "@/components/Auth/AuthGate"
+import { isElectronApp } from "@/lib/isElectron"
 
 type ProtectedRouteProps = {
   children: ReactElement
@@ -17,6 +18,10 @@ export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) 
   useEffect(() => {
     if (!authReady) return
     let cancelled = false
+    if (isElectronApp()) {
+      setRouteVerified(isAuthenticated)
+      return
+    }
     setRouteVerified(false)
     void refreshAuth().then(() => {
       if (!cancelled) setRouteVerified(true)
@@ -24,7 +29,7 @@ export const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) 
     return () => {
       cancelled = true
     }
-  }, [authReady, location.pathname, refreshAuth])
+  }, [authReady, isAuthenticated, location.pathname, refreshAuth])
 
   if (!authReady || !routeVerified) {
     return <AuthGate>{null}</AuthGate>

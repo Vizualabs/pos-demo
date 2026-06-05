@@ -1,3 +1,6 @@
+import { isElectronApp } from "@/lib/isElectron"
+import { electronFetchAsResponse } from "@/lib/electronFetch"
+
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 
 export type ApiClientOptions = {
@@ -41,6 +44,24 @@ export function getStoredAuthToken(): string | null {
   } catch {
     return null
   }
+}
+
+/** Use Electron main-process fetch in desktop app (file:// cannot reach API reliably). */
+async function platformFetch(
+  url: string,
+  init: RequestInit & { headers?: Record<string, string> },
+): Promise<Response> {
+  if (isElectronApp() && window.electronAPI?.fetch) {
+    const headers = (init.headers ?? {}) as Record<string, string>
+    const body = typeof init.body === "string" ? init.body : undefined
+    return electronFetchAsResponse(url, {
+      method: init.method,
+      headers,
+      body,
+      credentials: init.credentials,
+    })
+  }
+  return fetch(url, init)
 }
 
 async function readErrorMessage(res: Response): Promise<string> {
@@ -96,8 +117,7 @@ export async function apiFetch<T>(
         ? (init.body as FormData)
         : JSON.stringify(init.body)
 
-  const res = await fetch(url, {
-    ...init,
+  const res = await platformFetch(url, {
     method,
     headers,
     credentials,
@@ -158,8 +178,7 @@ export async function apiFetchBlob(
         ? (init.body as FormData)
         : JSON.stringify(init.body)
 
-  const res = await fetch(url, {
-    ...init,
+  const res = await platformFetch(url, {
     method,
     headers,
     credentials,

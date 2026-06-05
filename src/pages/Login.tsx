@@ -13,6 +13,8 @@ import {
   persistAuthSession,
   userFromLoginResponse,
 } from "@/lib/authSession"
+import { isElectronApp } from "@/lib/isElectron"
+import { electronFetchAsResponse } from "@/lib/electronFetch"
 import { AuthBackground } from "@/components/Auth/AuthBackground"
 
 const LOGIN_API = "/api/security/login"
@@ -32,7 +34,8 @@ const Login = () => {
 
   useEffect(() => {
     const from = (location.state as { from?: unknown } | null)?.from
-    if (!from && !isAuthenticated) {
+    // Web: force fresh sign-in when opening login directly. Electron: keep saved session.
+    if (!isElectronApp() && !from && !isAuthenticated) {
       clearAuthSession()
     }
   }, [location.state, isAuthenticated])
@@ -51,12 +54,16 @@ const Login = () => {
     setIsSubmitting(true)
 
     try {
-      const response = await fetch(resolveApiUrl(LOGIN_API), {
+      const loginUrl = resolveApiUrl(LOGIN_API)
+      const loginInit = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        credentials: "include" as RequestCredentials,
         body: JSON.stringify({ username: u, password: p }),
-      })
+      }
+      const response = isElectronApp()
+        ? await electronFetchAsResponse(loginUrl, loginInit)
+        : await fetch(loginUrl, loginInit)
 
       if (!response.ok) {
         const message = (await response.json().catch(() => ({})))?.message
@@ -79,11 +86,15 @@ const Login = () => {
       }
       if (token) detailsHeaders.Authorization = `Bearer ${token}`
 
-      const detailsResponse = await fetch(resolveApiUrl(USER_DETAILS_API), {
+      const detailsUrl = resolveApiUrl(USER_DETAILS_API)
+      const detailsInit = {
         method: "GET",
         headers: detailsHeaders,
-        credentials: "include",
-      })
+        credentials: "include" as RequestCredentials,
+      }
+      const detailsResponse = isElectronApp()
+        ? await electronFetchAsResponse(detailsUrl, detailsInit)
+        : await fetch(detailsUrl, detailsInit)
 
       const user = detailsResponse.ok
         ? await detailsResponse.json().catch(() => userFromLoginResponse(data))
@@ -103,9 +114,15 @@ const Login = () => {
       markAuthenticated()
 
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname
-      navigate(from || "/pos", { replace: true })
-    } catch {
-      setError("Login failed. Please check credentials and try again.")
+      const target = from || "/pos"
+      if (isElectronApp()) {
+        window.location.hash = `#${target}`
+        return
+      }
+      navigate(target, { replace: true })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Login failed"
+      setError(`Login failed: ${msg}`)
     } finally {
       setIsSubmitting(false)
     }
