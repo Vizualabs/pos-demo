@@ -1,0 +1,8 @@
+{
+  "appName": "DineMate POS",
+  "installFolder": "DineMate POS",
+  "windowTitle": "DineMate POS",
+  "appId": "com.dinemate.pos",
+  "logoSource": "public/Dinemate logo.png",
+  "iconPath": "build/icon.png"
+}

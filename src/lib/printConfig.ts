@@ -1,7 +1,9 @@
+import { isElectronApp } from "@/lib/isElectron"
+
 const STORAGE_KEY = "pos_print_printers_v1"
 
-/** How receipt jobs are sent: browser dialog, QZ Tray, or local HTTP print agent. */
-export type PrintBackend = "browser" | "qz" | "http"
+/** How receipt jobs are sent: browser dialog, QZ Tray, HTTP agent, or Electron (desktop app). */
+export type PrintBackend = "browser" | "qz" | "http" | "electron"
 
 export type PrintPrinterConfig = {
   printBackend: PrintBackend
@@ -15,7 +17,7 @@ export type PrintPrinterConfig = {
 
 /** First-time load (no localStorage entry yet). Change in Settings anytime; existing saved config wins over this. */
 const defaults: PrintPrinterConfig = {
-  printBackend: "qz",
+  printBackend: isElectronApp() ? "electron" : "qz",
   customerPrinterName: "",
   kitchen1PrinterName: "",
   kitchen2PrinterName: "", 
@@ -23,6 +25,7 @@ const defaults: PrintPrinterConfig = {
 }
 
 function normalizeBackend(v: unknown): PrintBackend {
+  if (v === "electron" && isElectronApp()) return "electron"
   if (v === "qz" || v === "http" || v === "browser") return v
   return defaults.printBackend
 }
@@ -32,8 +35,12 @@ export function loadPrintPrinterConfig(): PrintPrinterConfig {
     const raw = localStorage.getItem(STORAGE_KEY)
     if (!raw) return { ...defaults }
     const p = JSON.parse(raw) as Partial<PrintPrinterConfig>
+    let printBackend = normalizeBackend(p.printBackend)
+    if (isElectronApp() && (printBackend === "qz" || printBackend === "http")) {
+      printBackend = "electron"
+    }
     return {
-      printBackend: normalizeBackend(p.printBackend),
+      printBackend,
       customerPrinterName: String(p.customerPrinterName ?? ""),
       kitchen1PrinterName: String(p.kitchen1PrinterName ?? ""),
       kitchen2PrinterName: String(p.kitchen2PrinterName ?? ""),

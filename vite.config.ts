@@ -12,8 +12,23 @@ const devProxy = {
   cookieDomainRewrite: "localhost",
 };
 
+// Relative base path required for Electron (loads dist/index.html via file://).
+const isElectronBuild = process.env.ELECTRON === "true"
+
+/** Strip crossorigin from built HTML — breaks ES modules on Electron file:// / app:// */
+function electronHtmlPlugin() {
+  return {
+    name: "electron-html",
+    transformIndexHtml(html: string) {
+      if (!isElectronBuild) return html;
+      return html.replace(/\s+crossorigin(="[^"]*")?/g, "");
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  base: isElectronBuild ? "./" : "/",
   server: {
     host: "::",
     port: 5000,
@@ -24,7 +39,11 @@ export default defineConfig(({ mode }) => ({
       "/images": devProxy,
     },
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [
+    react(),
+    isElectronBuild && electronHtmlPlugin(),
+    mode === "development" && componentTagger(),
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

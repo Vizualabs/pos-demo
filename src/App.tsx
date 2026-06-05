@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route } from "react-router-dom";
+import { isElectronApp } from "@/lib/isElectron";
 import { AuthProvider } from "./components/Auth/AuthProvider";
 import { AuthGate } from "./components/Auth/AuthGate";
 import { ProtectedRoute } from "./components/Auth/ProtectedRoute";
@@ -26,15 +27,12 @@ import Orders from "./pages/Orders";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <AuthProvider>
-        <BrowserRouter>
-          <AuthGate>
-            <Routes>
+const AppRoutes = () => {
+  const Router = isElectronApp() ? HashRouter : BrowserRouter;
+  return (
+    <Router>
+      <AuthGate>
+        <Routes>
               <Route path="/" element={<RootRoute />} />
               <Route path="/login" element={<LoginRoute />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -139,9 +137,19 @@ const App = () => (
 
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
-            </Routes>
-          </AuthGate>
-        </BrowserRouter>
+        </Routes>
+      </AuthGate>
+    </Router>
+  );
+};
+
+const App = () => (
+  <QueryClientProvider client={queryClient}>
+    <TooltipProvider>
+      <Toaster />
+      <Sonner />
+      <AuthProvider>
+        <AppRoutes />
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

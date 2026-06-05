@@ -3,6 +3,7 @@ import { getBrandLogoForEmbed } from "@/lib/brandLogo"
 import { loadPrintPrinterConfig } from "@/lib/printConfig"
 import { printHtmlViaQz } from "@/lib/qzPrintClient"
 import { postPrintToAgent } from "@/lib/httpPrintAgent"
+import { printHtmlViaElectron } from "@/lib/electronPrintClient"
 import { toast } from "sonner"
 
 export type ReceiptLine = {
@@ -441,6 +442,22 @@ function runPrint(html: string, onComplete?: () => void, options?: RunPrintOptio
 
   const cfg = loadPrintPrinterConfig()
   const printerName = (options?.printerName ?? "").trim()
+
+  if (cfg.printBackend === "electron") {
+    if (!printerName) {
+      toast.error("Printer name empty — set it in Settings for this slot.")
+      queueMicrotask(() => fireComplete())
+      return
+    }
+    void printHtmlViaElectron(printerName, html)
+      .then(() => fireComplete())
+      .catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e)
+        toast.error(`Print failed: ${msg}`)
+        fireComplete()
+      })
+    return
+  }
 
   if (cfg.printBackend === "qz") {
     if (!printerName) {

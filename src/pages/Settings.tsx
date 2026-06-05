@@ -43,6 +43,8 @@ import {
   type PrintBackend,
   type PrintPrinterConfig,
 } from "@/lib/printConfig"
+import { isElectronApp } from "@/lib/isElectron"
+import { listElectronPrinters } from "@/lib/electronPrintClient"
 import {
   PROFILE_AVATAR_CHANGED,
   extractProfileImageFromUser,
@@ -54,7 +56,10 @@ const Settings = () => {
   const navigate = useNavigate()
   const { logout } = useAuth()
   const GENERAL_SETTINGS_KEY = "posGeneralSettings"
+  const inElectron = isElectronApp()
   const [printCfg, setPrintCfg] = useState<PrintPrinterConfig>(() => loadPrintPrinterConfig())
+  const [electronPrinters, setElectronPrinters] = useState<{ name: string; isDefault: boolean }[]>([])
+  const [printersLoading, setPrintersLoading] = useState(false)
   const [showLogoutDialog, setShowLogoutDialog] = useState(false)
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [activeTab, setActiveTab] = useState("general")
@@ -379,11 +384,21 @@ const Settings = () => {
                       Receipt printers (80mm thermal)
                     </CardTitle>
                     <p className="text-sm text-muted-foreground font-normal">
-                      For <span className="font-medium text-foreground">network / thermal printers</span> without the
-                      Chrome print dialog, use <span className="font-medium text-foreground">QZ Tray</span> (install on
-                      this PC, add printers in Windows) or run the optional{" "}
-                      <span className="font-medium text-foreground">print-agent</span> service and choose HTTP below.
-                      Printer names must match Windows exactly (Control Panel → Printers).
+                      {inElectron ? (
+                        <>
+                          Desktop POS app — receipts print <span className="font-medium text-foreground">silently</span>{" "}
+                          to your Windows printers (USB / LAN). Add printers in Windows first, then enter the exact name
+                          below or pick from the list.
+                        </>
+                      ) : (
+                        <>
+                          For <span className="font-medium text-foreground">network / thermal printers</span> without the
+                          Chrome print dialog, use <span className="font-medium text-foreground">QZ Tray</span> (install on
+                          this PC, add printers in Windows) or run the optional{" "}
+                          <span className="font-medium text-foreground">print-agent</span> service and choose HTTP below.
+                          Printer names must match Windows exactly (Control Panel → Printers).
+                        </>
+                      )}
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -397,11 +412,24 @@ const Settings = () => {
                           <SelectValue placeholder="Choose method" />
                         </SelectTrigger>
                         <SelectContent>
+                          {inElectron ? (
+                            <SelectItem value="electron">Desktop app — silent print (recommended)</SelectItem>
+                          ) : null}
                           <SelectItem value="browser">Browser print dialog (Chrome / Edge)</SelectItem>
-                          <SelectItem value="qz">QZ Tray — silent to named printers</SelectItem>
-                          <SelectItem value="http">Local print agent (HTTP)</SelectItem>
+                          {!inElectron ? (
+                            <>
+                              <SelectItem value="qz">QZ Tray — silent to named printers</SelectItem>
+                              <SelectItem value="http">Local print agent (HTTP)</SelectItem>
+                            </>
+                          ) : null}
                         </SelectContent>
                       </Select>
+                      {printCfg.printBackend === "electron" ? (
+                        <p className="text-xs text-muted-foreground">
+                          Cashier bill and kitchen tickets print automatically to the printers you set below — no extra
+                          software needed.
+                        </p>
+                      ) : null}
                       {printCfg.printBackend === "qz" ? (
                         <p className="text-xs text-muted-foreground">
                           Download QZ Tray from qz.io, install, then approve this site when prompted. Use the exact
@@ -459,6 +487,43 @@ const Settings = () => {
                         disabled={printCfg.printBackend !== "http"}
                       />
                     </div>
+                    {inElectron ? (
+                      <div className="space-y-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={printersLoading}
+                          onClick={async () => {
+                            setPrintersLoading(true)
+                            try {
+                              const list = await listElectronPrinters()
+                              setElectronPrinters(list)
+                              if (list.length === 0) {
+                                toast.message("No printers found — add them in Windows Settings → Printers")
+                              } else {
+                                toast.success(`Found ${list.length} printer(s)`)
+                              }
+                            } catch (e) {
+                              toast.error(e instanceof Error ? e.message : "Could not list printers")
+                            } finally {
+                              setPrintersLoading(false)
+                            }
+                          }}
+                        >
+                          {printersLoading ? "Loading…" : "Show Windows printers"}
+                        </Button>
+                        {electronPrinters.length > 0 ? (
+                          <ul className="text-xs text-muted-foreground space-y-1 max-h-32 overflow-y-auto border rounded-md p-2">
+                            {electronPrinters.map((p) => (
+                              <li key={p.name}>
+                                <span className="font-mono text-foreground">{p.name}</span>
+                                {p.isDefault ? " (default)" : ""}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    ) : null}
                     <Button
                       type="button"
                       variant="secondary"

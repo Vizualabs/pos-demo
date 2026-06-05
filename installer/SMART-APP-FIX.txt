@@ -1,0 +1,27 @@
+Windows "Smart App Control blocked" — විසඳුම
+=============================================
+
+සාමාන්‍යයෙන් "DineMate POS Setup 1.1.4.exe" run කරන්න.
+Block වෙනවා නම් මේ fallback use කරන්න:
+
+1. DineMate-POS-Setup-v1.1.4.zip extract කරන්න
+2. INSTALL.bat double-click කරන්න (Setup.exe නෙවෙයි)
+3. Desktop shortcut open කරන්න
+
+තවමත් block වෙනවා නම් — Smart App Control Off කරන්න:
+
+1. Start → Settings (Windows Settings)
+2. Privacy & security
+3. Windows Security
+4. App & browser control
+5. Smart App Control settings
+6. "Off" select කරන්න
+7. PC restart කරන්න (ඉල්ලුවොත්)
+8. INSTALL.bat නැවත run කරන්න
+
+Alternative (file unblock only):
+- Install folder: %LOCALAPPDATA%\DineMate POS
+- DineMate POS.exe → Right-click → Properties → Unblock → Apply
+
+Client එකට ප්‍රධානව "DineMate POS Setup 1.1.4.exe" දෙන්න.
+Block වෙනවා නම් ZIP + INSTALL.bat fallback දෙන්න.

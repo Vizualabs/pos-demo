@@ -1,0 +1,22 @@
+App name & icon — change කරන හැටි
+====================================
+
+NAME වෙනස් කරන්න:
+1. Open:  branding.json
+2. Change:
+   - "appName"        → Desktop shortcut / installer name (e.g. "DineMate POS")
+   - "installFolder"  → Install folder under AppData\Local
+   - "windowTitle"    → Window title bar text
+3. Run:  npm run electron:build
+
+ICON වෙනස් කරන්න:
+1. Square PNG හදන්න (256x256 or 512x512)
+2. Save as:  build/icon.png
+   (optional: build/icon.ico for best Windows quality)
+3. Run:  npm run electron:build
+
+Client ZIP එක:
+   release\DineMate-POS-Client-v*.zip  (name follows appName)
+
+Note: Login page title ("DineMate") comes from the web app on the server.
+      Desktop app name/icon = branding.json + build/icon.png

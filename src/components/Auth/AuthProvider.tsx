@@ -14,6 +14,7 @@ import {
   sanitizeAuthSession,
   verifySessionWithServer,
 } from "@/lib/authSession"
+import { isElectronApp } from "@/lib/isElectron"
 import type { UserRole } from "@/lib/authSession"
 
 type AuthContextValue = {
@@ -51,6 +52,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsAuthenticated(false)
       return false
     }
+    if (isElectronApp()) {
+      setIsAuthenticated(true)
+      return true
+    }
     const ok = await verifySessionWithServer()
     setIsAuthenticated(ok)
     return ok
@@ -72,7 +77,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       sanitizeAuthSession()
       let ok = false
       if (hasValidAuthSession()) {
-        ok = await verifySessionWithServer()
+        ok = isElectronApp() ? true : await verifySessionWithServer()
       }
       if (!cancelled) {
         setIsAuthenticated(ok)

@@ -1,4 +1,5 @@
 import { resolveApiUrl } from "@/lib/apiClient"
+import { isElectronApp } from "@/lib/isElectron"
 
 export type UserRole = "ADMIN" | "USER" | "GUEST"
 
@@ -69,19 +70,24 @@ export const getAuthToken = (): string | null => {
   return localStorage.getItem("auth_token") ?? localStorage.getItem("token")
 }
 
+function sessionStore(): Storage {
+  // Electron file:// keeps login across restarts; browser tab uses sessionStorage.
+  return isElectronApp() ? localStorage : sessionStorage
+}
+
 export const hasActiveBrowserSession = (): boolean => {
   if (typeof window === "undefined") return false
-  return sessionStorage.getItem(BROWSER_SESSION_KEY) === "1"
+  return sessionStore().getItem(BROWSER_SESSION_KEY) === "1"
 }
 
 export const markBrowserSessionActive = (): void => {
   if (typeof window === "undefined") return
-  sessionStorage.setItem(BROWSER_SESSION_KEY, "1")
+  sessionStore().setItem(BROWSER_SESSION_KEY, "1")
 }
 
 export const clearBrowserSession = (): void => {
   if (typeof window === "undefined") return
-  sessionStorage.removeItem(BROWSER_SESSION_KEY)
+  sessionStore().removeItem(BROWSER_SESSION_KEY)
 }
 
 /** Quick local check only — use with Spring Boot verify before trusting session */
@@ -128,6 +134,13 @@ export async function verifySessionWithServer(): Promise<boolean> {
   if (!hasValidAuthSession()) {
     clearAuthSession()
     return false
+  }
+
+  // In the packaged Electron app we already have a local token + user stored.
+  // Server cookies are not reliable from file:// origin, and CORS may block the check.
+  // Trust the existing browser session instead of forcing a remote verify on every launch.
+  if (isElectronApp()) {
+    return true
   }
 
   const token = getAuthToken()
