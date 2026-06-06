@@ -1,5 +1,4 @@
-import { isElectronApp } from "@/lib/isElectron"
-import { electronFetchAsResponse } from "@/lib/electronFetch"
+import { electronFetchAsResponse, shouldRouteApiViaElectronMain } from "@/lib/electronFetch"
 
 type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
 
@@ -51,7 +50,7 @@ async function platformFetch(
   url: string,
   init: RequestInit & { headers?: Record<string, string> },
 ): Promise<Response> {
-  if (isElectronApp() && window.electronAPI?.fetch) {
+  if (shouldRouteApiViaElectronMain()) {
     const headers = (init.headers ?? {}) as Record<string, string>
     const body = typeof init.body === "string" ? init.body : undefined
     return electronFetchAsResponse(url, {

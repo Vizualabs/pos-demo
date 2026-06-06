@@ -40,10 +40,10 @@ import { resolveApiUrl } from "@/lib/apiClient"
 import {
   loadPrintPrinterConfig,
   savePrintPrinterConfig,
+  hasElectronPrintApi,
   type PrintBackend,
   type PrintPrinterConfig,
 } from "@/lib/printConfig"
-import { isElectronApp } from "@/lib/isElectron"
 import { listElectronPrinters } from "@/lib/electronPrintClient"
 import {
   PROFILE_AVATAR_CHANGED,
@@ -56,7 +56,7 @@ const Settings = () => {
   const navigate = useNavigate()
   const { logout } = useAuth()
   const GENERAL_SETTINGS_KEY = "posGeneralSettings"
-  const inElectron = isElectronApp()
+  const canSilentPrint = hasElectronPrintApi()
   const [printCfg, setPrintCfg] = useState<PrintPrinterConfig>(() => loadPrintPrinterConfig())
   const [electronPrinters, setElectronPrinters] = useState<{ name: string; isDefault: boolean }[]>([])
   const [printersLoading, setPrintersLoading] = useState(false)
@@ -384,7 +384,7 @@ const Settings = () => {
                       Receipt printers (80mm thermal)
                     </CardTitle>
                     <p className="text-sm text-muted-foreground font-normal">
-                      {inElectron ? (
+                      {canSilentPrint ? (
                         <>
                           Desktop POS app — receipts print <span className="font-medium text-foreground">silently</span>{" "}
                           to your Windows printers (USB / LAN). Add printers in Windows first, then enter the exact name
@@ -402,21 +402,51 @@ const Settings = () => {
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    {canSilentPrint ? (
+                      <div className="flex items-center justify-between rounded-lg border border-border p-4">
+                        <div>
+                          <Label htmlFor="silent-print">Silent print</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Print receipts directly to your Windows printers — no print dialog
+                          </p>
+                        </div>
+                        <Switch
+                          id="silent-print"
+                          checked={printCfg.silentPrint}
+                          onCheckedChange={(checked) =>
+                            setPrintCfg((p) => ({
+                              ...p,
+                              silentPrint: checked,
+                              printBackend: checked ? "electron" : "browser",
+                            }))
+                          }
+                        />
+                      </div>
+                    ) : null}
                     <div className="max-w-md space-y-2">
                       <Label htmlFor="print-backend">Print method</Label>
                       <Select
                         value={printCfg.printBackend}
-                        onValueChange={(v) => setPrintCfg((p) => ({ ...p, printBackend: v as PrintBackend }))}
+                        onValueChange={(v) => {
+                          const backend = v as PrintBackend
+                          setPrintCfg((p) => ({
+                            ...p,
+                            printBackend: backend,
+                            silentPrint: canSilentPrint
+                              ? backend === "electron"
+                              : p.silentPrint,
+                          }))
+                        }}
                       >
                         <SelectTrigger id="print-backend" className="mt-1">
                           <SelectValue placeholder="Choose method" />
                         </SelectTrigger>
                         <SelectContent>
-                          {inElectron ? (
+                          {canSilentPrint ? (
                             <SelectItem value="electron">Desktop app — silent print (recommended)</SelectItem>
                           ) : null}
                           <SelectItem value="browser">Browser print dialog (Chrome / Edge)</SelectItem>
-                          {!inElectron ? (
+                          {!canSilentPrint ? (
                             <>
                               <SelectItem value="qz">QZ Tray — silent to named printers</SelectItem>
                               <SelectItem value="http">Local print agent (HTTP)</SelectItem>
@@ -487,7 +517,7 @@ const Settings = () => {
                         disabled={printCfg.printBackend !== "http"}
                       />
                     </div>
-                    {inElectron ? (
+                    {canSilentPrint ? (
                       <div className="space-y-2">
                         <Button
                           type="button"

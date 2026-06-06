@@ -1,5 +1,6 @@
 "use client"
 
+import { isAxiosError } from "axios"
 import { useEffect, useRef, useState } from "react"
 import { DashboardLayout } from "@/components/Layout/DashboardLayout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -202,7 +203,15 @@ const POS = () => {
         setMenuItems(prods.filter((p) => p.isAvailable !== false))
       } catch (e) {
         console.error(e)
-        toast.error("Failed to load categories/products")
+        let message = "Failed to load categories/products"
+        if (isAxiosError(e)) {
+          message = e.response?.status
+            ? `Failed to load menu (${e.response.status})`
+            : e.message || message
+        } else if (e instanceof Error && e.message.trim()) {
+          message = e.message
+        }
+        toast.error(message)
       }
     })()
 

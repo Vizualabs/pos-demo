@@ -1,6 +1,6 @@
 import type { Kitchen } from "@/lib/ordersApi"
 import { getBrandLogoForEmbed } from "@/lib/brandLogo"
-import { loadPrintPrinterConfig } from "@/lib/printConfig"
+import { loadPrintPrinterConfig, usesElectronSilentPrint } from "@/lib/printConfig"
 import { printHtmlViaQz } from "@/lib/qzPrintClient"
 import { postPrintToAgent } from "@/lib/httpPrintAgent"
 import { printHtmlViaElectron } from "@/lib/electronPrintClient"
@@ -253,43 +253,69 @@ export async function buildCustomerBillBodyHtml(
   return buildCustomerBillHtml(customer, d, logo?.dataUrl ?? null)
 }
 
-/** Black-only styles for preview + print document */
+/** Black-only thermal bill — compact fonts, flex layout like preview */
 export const CUSTOMER_BILL_PRINT_STYLES = `
-  .customer-print-section { color: #000; font-family: system-ui, -apple-system, Segoe UI, sans-serif; font-size: 11px; line-height: 1.35; }
-  .c-top { text-align: center; padding: 4px 4px 8px; border-bottom: 2px solid #000; }
-  .c-logo-wrap { padding: 4px 0 6px; }
-  .c-logo { display: block; margin: 0 auto; width: 22mm; max-width: 72%; height: auto; max-height: 18mm; object-fit: contain; filter: grayscale(100%) contrast(1.15); }
-  .c-restaurant { font-size: 15px; font-weight: 800; letter-spacing: 0.5px; }
-  .c-head-rule { width: 28px; height: 2px; background: #000; margin: 6px auto 0; }
-  .c-body { padding: 8px 2px 4px; }
-  .c-hr { border-top: 2px solid #000; margin: 8px 0; opacity: 0.15; }
-  .c-hr-thin { border-top-width: 1px; margin: 6px 0; }
-  .c-meta { font-size: 10px; }
-  .c-meta-row { display: flex; justify-content: space-between; gap: 6px; padding: 2px 0; }
-  .c-meta-v { font-weight: 700; text-align: right; }
-  .c-meta-sm { font-size: 9px; font-weight: 600; }
-  .c-items-head { display: grid; grid-template-columns: 1fr 2.2rem 3.5rem; gap: 4px; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.3px; padding-bottom: 4px; border-bottom: 1px solid #000; }
+  .customer-print-section {
+    color: #000;
+    font-family: Arial, 'Segoe UI', sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.35;
+    width: 100%;
+  }
+  .c-top { text-align: center; padding: 6px 0 8px; border-bottom: 2px solid #000; }
+  .c-logo-wrap { padding: 0 0 6px; text-align: center; }
+  .c-logo { display: block; margin: 0 auto; height: 44px; width: auto; max-width: 65%; object-fit: contain; filter: grayscale(100%) contrast(1.15); }
+  .c-restaurant { font-size: 14px; font-weight: 800; letter-spacing: 0.04em; text-align: center; text-transform: uppercase; color: #000; }
+  .c-head-rule { width: 32px; height: 2px; background: #000; margin: 8px auto 0; }
+  .c-body { padding: 6px 0 4px; box-sizing: border-box; }
+  .c-hr { border-top: 1px solid #000; margin: 6px 0; }
+  .c-hr-thin { border-top-width: 1px; margin: 5px 0; }
+  .c-meta { font-size: 10px; font-weight: 700; color: #000; }
+  .c-meta-row { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 2px 0; color: #000; }
+  .c-meta-row > span:first-child { color: #000; font-weight: 700; }
+  .c-meta-v { font-weight: 800; text-align: right; word-break: break-word; color: #000; }
+  .c-meta-sm { font-size: 9px; font-weight: 700; color: #000; }
+  .c-items-head { display: grid; grid-template-columns: 1fr 2rem 3.8rem; gap: 4px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: #000; padding-bottom: 3px; border-bottom: 1px solid #000; }
   .c-col-qty { text-align: center; }
   .c-col-amt { text-align: right; }
-  .c-items { margin-top: 4px; }
-  .c-item-row { display: flex; justify-content: space-between; gap: 6px; padding: 5px 0; border-bottom: 1px solid #e5e5e5; }
+  .c-items { margin-top: 2px; }
+  .c-item-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; padding: 5px 0; border-bottom: 1px solid #000; color: #000; }
   .c-item-row:last-child { border-bottom: none; }
-  .c-item-name { font-size: 11px; font-weight: 700; }
-  .c-item-sub { font-size: 9px; color: #333; margin-top: 1px; }
-  .c-item-amt { font-size: 11px; font-weight: 800; white-space: nowrap; }
-  .c-summary { font-size: 10px; }
-  .c-sum-row { display: flex; justify-content: space-between; padding: 2px 0; }
-  .c-net-row { display: flex; justify-content: space-between; padding: 6px 0 2px; margin-top: 4px; border-top: 2px solid #000; font-size: 12px; font-weight: 900; }
-  .c-pay-block { padding: 6px 0; border: 1px dashed #666; margin-top: 4px; }
-  .c-sum-due span:last-child { font-weight: 900; }
-  .c-stats { display: flex; justify-content: space-between; font-size: 9px; font-weight: 600; }
+  .c-item-main { flex: 1; min-width: 0; }
+  .c-item-name { font-size: 11px; font-weight: 800; line-height: 1.25; word-break: break-word; color: #000; }
+  .c-item-sub { font-size: 10px; font-weight: 800; color: #000; margin-top: 1px; line-height: 1.2; }
+  .c-item-amt { font-size: 11px; font-weight: 800; white-space: nowrap; flex-shrink: 0; color: #000; }
+  .c-summary { font-size: 10px; font-weight: 700; color: #000; }
+  .c-sum-row { display: flex; justify-content: space-between; padding: 2px 0; color: #000; }
+  .c-sum-row > span:first-child { color: #000; font-weight: 700; }
+  .c-net-row { display: flex; justify-content: space-between; align-items: center; padding-top: 6px; margin-top: 3px; border-top: 2px solid #000; font-size: 12px; font-weight: 900; color: #000; }
+  .c-net-row span:last-child { font-size: 13px; font-weight: 900; color: #000; }
+  .c-pay-block { padding: 6px 0; border: 1px dashed #000; margin-top: 4px; }
+  .c-sum-due span:first-child { font-weight: 700; color: #000; }
+  .c-sum-due span:last-child { font-weight: 900; color: #000; }
+  .c-stats { display: flex; justify-content: space-between; font-size: 9px; font-weight: 800; color: #000; }
+  .c-stats strong { color: #000; font-weight: 900; }
   .c-foot { text-align: center; padding-top: 4px; }
-  .c-thanks { font-size: 10px; font-weight: 800; margin: 0 0 4px; letter-spacing: 0.3px; }
-  .c-credit { font-size: 8px; color: #333; margin: 0; font-style: italic; }
+  .c-thanks { font-size: 10px; font-weight: 900; margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.04em; color: #000; }
+  .c-credit { font-size: 8px; font-weight: 700; color: #000; margin: 0; }
+  @media print {
+    .customer-print-section, .c-body, .c-meta, .c-items-head, .c-item-row, .c-summary, .c-stats, .c-foot,
+    .c-meta-row, .c-meta-v, .c-item-name, .c-item-sub, .c-item-amt, .c-sum-row, .c-net-row, .c-thanks, .c-credit {
+      color: #000 !important;
+    }
+  }
 `
 
 /** Matches index.css — embedded in print popup so styles apply without Tailwind */
 const KOT_PRINT_STYLES = `
+  .kot-single {
+    page-break-after: auto;
+    width: 100%;
+    font-family: 'Iskoola Pota', 'Nirmala UI', 'Segoe UI', Arial, sans-serif;
+    font-size: 12px;
+    color: #000;
+  }
   .kot-title {
     font-size: 1.15rem;
     letter-spacing: 0.3px;
@@ -297,40 +323,50 @@ const KOT_PRINT_STYLES = `
     padding-bottom: 6px;
     margin-bottom: 8px;
     text-align: center;
-    font-weight: bold;
+    font-weight: 800;
+    color: #000;
+  }
+  .kot-subtitle {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #000;
+    text-align: center;
+    margin: 4px 0 8px;
   }
   .kot-table {
     font-size: 0.95rem;
+    font-weight: 700;
     line-height: 1.5;
     width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
+    color: #000;
   }
   .kot-table th, .kot-table td {
     text-align: left;
     padding: 7px 4px;
-    border-bottom: 1px solid #eaeaea;
+    border-bottom: 1px solid #000;
+    color: #000;
+    font-weight: 700;
   }
-  .kot-table th:nth-child(2), .kot-table td:nth-child(2) { text-align: center; }
-  .kot-table th:nth-child(3), .kot-table td:nth-child(3) { text-align: left; word-break: break-word; }
-  .kot-table th { font-weight: 600; }
+  .kot-table th:nth-child(2), .kot-table td:nth-child(2) { text-align: center; width: 3rem; font-weight: 800; }
+  .kot-table th:nth-child(3), .kot-table td:nth-child(3) { text-align: left; word-break: break-word; font-size: 0.95rem; }
+  .kot-table th { font-weight: 800; }
   .prep-note {
-    font-style: italic;
-    font-size: 0.8rem;
+    font-size: 0.9rem;
+    font-weight: 700;
     margin-top: 14px;
     text-align: center;
-    border-top: 1px dashed #777;
+    border-top: 1px dashed #000;
     padding-top: 8px;
+    color: #000;
   }
-  .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; background: #111; color: #fff; font-size: 0.85rem; margin: 8px 0; }
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; background: #000; color: #fff; font-size: 0.85rem; font-weight: 800; margin: 8px 0; }
   .kot-page { page-break-after: always; }
   .kot-page:last-child { page-break-after: auto; }
-  .kot-single { page-break-after: auto; }
-  .kot-subtitle { font-size: 0.7rem; color: #666; text-align: center; margin: 4px 0 8px; }
-  /* Key/value rows: keep labels tight, values aligned nicely */
-  .kot-meta { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 4px; font-size: 0.72rem; margin-top: 8px; color: #111; align-items: baseline; }
-  .kot-meta > span:nth-child(odd) { color: #555; }
-  .kot-meta > span:nth-child(even) { text-align: right; font-weight: 600; }
+  .kot-meta { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 4px; font-size: 0.85rem; font-weight: 700; margin-top: 8px; color: #000; align-items: baseline; }
+  .kot-meta > span:nth-child(odd) { color: #000; font-weight: 800; }
+  .kot-meta > span:nth-child(even) { text-align: right; font-weight: 800; color: #000; }
 `
 
 function renderKotInnerHtml(ticket: KitchenTicketPayload, d: Date) {
@@ -338,8 +374,8 @@ function renderKotInnerHtml(ticket: KitchenTicketPayload, d: Date) {
     .map(
       (line) => `<tr>
       <td>${escapeHtml(kotLineItemCell(line))}</td>
-      <td style="font-weight:700">${line.qty}</td>
-      <td style="font-size:0.95rem">${escapeHtml(line.lineNote?.trim() ? line.lineNote.trim() : kotLabels.none)}</td>
+      <td>${line.qty}</td>
+      <td>${escapeHtml(line.lineNote?.trim() ? line.lineNote.trim() : kotLabels.none)}</td>
     </tr>`,
     )
     .join("")
@@ -349,10 +385,10 @@ function renderKotInnerHtml(ticket: KitchenTicketPayload, d: Date) {
     <p class="kot-subtitle">${kotLabels.subtitle}</p>
     <div style="text-align:center"><span class="badge">${ticket.kitchenBadgeSi}</span></div>
     <div class="kot-meta">
-      <span>${kotLabels.orderNo}:</span><span style="text-align:right;font-family:monospace;font-weight:700">#${ticket.orderId}</span>
-      <span>${kotLabels.table}:</span><span style="text-align:right">${escapeHtml(ticket.tableLabel)}</span>
-      <span>${kotLabels.orderType}:</span><span style="text-align:right">${escapeHtml(ticket.orderTypeLabelSi)}</span>
-      <span>${kotLabels.time}:</span><span style="text-align:right">${escapeHtml(d.toLocaleString())}</span>
+      <span>${kotLabels.orderNo}:</span><span>#${ticket.orderId}</span>
+      <span>${kotLabels.table}:</span><span>${escapeHtml(ticket.tableLabel)}</span>
+      <span>${kotLabels.orderType}:</span><span>${escapeHtml(ticket.orderTypeLabelSi)}</span>
+      <span>${kotLabels.time}:</span><span>${escapeHtml(d.toLocaleString())}</span>
     </div>
     <table class="kot-table">
       <thead><tr>
@@ -366,22 +402,42 @@ function renderKotInnerHtml(ticket: KitchenTicketPayload, d: Date) {
   `
 }
 
-/** 80mm thermal roll: content width ~72mm inside printable area. */
+/** 80mm roll — equal left/right padding centers content on physical paper. */
 const THERMAL_BASE_STYLES = `
-      @page { size: 80mm auto; margin: 2mm; }
-      html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      body {
-        font-family: system-ui, -apple-system, Segoe UI, sans-serif;
-        width: 72mm;
-        max-width: 72mm;
-        margin: 0 auto;
-        padding: 2mm;
-        font-size: 11px;
+      @page { size: 80mm auto; margin: 0; }
+      html {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        width: 80mm;
+        margin: 0;
+        padding: 0;
         box-sizing: border-box;
+      }
+      body {
+        width: 80mm;
+        max-width: 80mm;
+        margin: 0;
+        padding: 2mm 5mm;
+        box-sizing: border-box;
+        overflow: visible;
+        color: #000;
+        background: #fff;
+      }
+      .thermal-content {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
+        padding: 0;
+        text-align: left;
+        box-sizing: border-box;
+        background: #fff;
       }
       @media print {
         html, body { height: auto !important; min-height: 0 !important; overflow: visible !important; }
-        body { margin: 0 auto; padding: 2mm; }
+        html { width: 80mm !important; margin: 0 !important; padding: 0 !important; }
+        body { width: 80mm !important; max-width: 80mm !important; margin: 0 !important; padding: 2mm 5mm !important; }
+        .thermal-content { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; }
       }
 `
 
@@ -389,16 +445,11 @@ function buildPrintDocumentHtmlCustomerOnly(customerHtml: string): string {
   return `<!DOCTYPE html><html><head>
     <meta charset="utf-8" />
     <title>Customer bill</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
       ${THERMAL_BASE_STYLES}
       ${CUSTOMER_BILL_PRINT_STYLES}
-      @media print {
-        .c-hr { border-color: #000 !important; opacity: 1 !important; }
-        .c-item-row { border-color: #ccc !important; }
-      }
     </style>
-  </head><body>${customerHtml}</body></html>`
+  </head><body><div class="thermal-content">${customerHtml}</div></body></html>`
 }
 
 /** One kitchen station per print job (80mm). */
@@ -406,18 +457,11 @@ function buildPrintDocumentHtmlKotSingle(kotInnerHtml: string): string {
   return `<!DOCTYPE html><html><head>
     <meta charset="utf-8" />
     <title>Kitchen ticket</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
       ${THERMAL_BASE_STYLES}
       ${KOT_PRINT_STYLES}
-      body { font-family: 'Noto Sans Sinhala', system-ui, sans-serif; font-size: 12px; }
-      .kot-title { font-size: 1.15rem; }
-      .kot-table { font-size: 0.95rem; line-height: 1.5; }
-      @media print {
-        .kot-single { page-break-after: auto; break-after: auto; }
-      }
     </style>
-  </head><body><div class="kot-single">${kotInnerHtml}</div></body></html>`
+  </head><body><div class="thermal-content"><div class="kot-single">${kotInnerHtml}</div></div></body></html>`
 }
 
 type RunPrintOptions = {
@@ -443,7 +487,7 @@ function runPrint(html: string, onComplete?: () => void, options?: RunPrintOptio
   const cfg = loadPrintPrinterConfig()
   const printerName = (options?.printerName ?? "").trim()
 
-  if (cfg.printBackend === "electron") {
+  if (usesElectronSilentPrint(cfg)) {
     if (!printerName) {
       toast.error("Printer name empty — set it in Settings for this slot.")
       queueMicrotask(() => fireComplete())

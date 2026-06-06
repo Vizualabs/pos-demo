@@ -14,7 +14,7 @@ import {
   userFromLoginResponse,
 } from "@/lib/authSession"
 import { isElectronApp } from "@/lib/isElectron"
-import { electronFetchAsResponse } from "@/lib/electronFetch"
+import { electronFetchAsResponse, shouldRouteApiViaElectronMain } from "@/lib/electronFetch"
 import { AuthBackground } from "@/components/Auth/AuthBackground"
 
 const LOGIN_API = "/api/security/login"
@@ -61,7 +61,7 @@ const Login = () => {
         credentials: "include" as RequestCredentials,
         body: JSON.stringify({ username: u, password: p }),
       }
-      const response = isElectronApp()
+      const response = shouldRouteApiViaElectronMain()
         ? await electronFetchAsResponse(loginUrl, loginInit)
         : await fetch(loginUrl, loginInit)
 
@@ -92,7 +92,7 @@ const Login = () => {
         headers: detailsHeaders,
         credentials: "include" as RequestCredentials,
       }
-      const detailsResponse = isElectronApp()
+      const detailsResponse = shouldRouteApiViaElectronMain()
         ? await electronFetchAsResponse(detailsUrl, detailsInit)
         : await fetch(detailsUrl, detailsInit)
 

@@ -1,5 +1,5 @@
 import axios, { AxiosHeaders, AxiosInstance, AxiosResponse, type InternalAxiosRequestConfig } from "axios"
-import { clearAuthSession } from "@/lib/authSession"
+import { redirectToLoginPage } from "@/lib/appNavigation"
 
 /** Dev: same-origin `/api` via Vite proxy. Prod: set VITE_API_BASE_URL to your API host. */
 function resolveAxiosBaseUrl(): string {
@@ -10,14 +10,6 @@ function resolveAxiosBaseUrl(): string {
 }
 
 const baseURL = resolveAxiosBaseUrl()
-
-function redirectToLogin(): void {
-  if (typeof window === "undefined") return
-  const path = window.location.pathname
-  if (path === "/" || path === "/login") return
-  clearAuthSession()
-  window.location.replace("/")
-}
 
 const axiosClient: AxiosInstance = axios.create({
   baseURL,
@@ -72,7 +64,7 @@ axiosClient.interceptors.response.use(
         }
       }
       if (error?.response?.status === 401) {
-        redirectToLogin()
+        redirectToLoginPage()
       }
     }
     return Promise.reject(error)

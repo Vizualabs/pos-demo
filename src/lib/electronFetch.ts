@@ -1,6 +1,15 @@
 import type { ElectronFetchResult } from "@/types/electron"
+import { isElectronApp } from "@/lib/isElectron"
 
 export type { ElectronFetchResult }
+
+/** Main-process fetch only for file:// — http dev/preview use renderer + Vite proxy. */
+export function shouldRouteApiViaElectronMain(): boolean {
+  if (typeof window === "undefined") return false
+  if (!isElectronApp() || !window.electronAPI?.fetch) return false
+  const proto = window.location.protocol
+  return proto === "file:" || proto === "app:"
+}
 
 /** Fetch via Electron main process — avoids CORS/cookie issues from file:// origin. */
 export async function electronFetch(
