@@ -39,6 +39,16 @@ export default defineConfig(({ mode }) => ({
       "/images": devProxy,
     },
   },
+  preview: {
+    host: "127.0.0.1",
+    port: 5001,
+    proxy: {
+      "/api": devProxy,
+      "/files": devProxy,
+      "/uploads": devProxy,
+      "/images": devProxy,
+    },
+  },
   plugins: [
     react(),
     isElectronBuild && electronHtmlPlugin(),

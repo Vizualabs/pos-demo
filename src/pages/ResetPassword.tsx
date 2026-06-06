@@ -17,7 +17,7 @@ import {
 } from "lucide-react"
 import { AuthBackground } from "@/components/Auth/AuthBackground"
 
-const RESET_PASSWORD_API = "/security/reset-password"
+const RESET_PASSWORD_API = "/api/security/reset-password"
 
 const MIN_PASSWORD_LEN = 6
 const MAX_PASSWORD_LEN = 128

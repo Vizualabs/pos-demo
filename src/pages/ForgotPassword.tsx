@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { AlertCircle, ArrowLeft, CheckCircle2, Mail, Send } from "lucide-react"
 import { AuthBackground } from "@/components/Auth/AuthBackground"
 
-const FORGOT_PASSWORD_API = "/security/forgot-password"
+const FORGOT_PASSWORD_API = "/api/security/forgot-password"
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 

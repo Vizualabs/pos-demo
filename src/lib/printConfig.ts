@@ -7,6 +7,8 @@ export type PrintBackend = "browser" | "qz" | "http" | "electron"
 
 export type PrintPrinterConfig = {
   printBackend: PrintBackend
+  /** Desktop app: print directly to named Windows printers (no dialog). */
+  silentPrint: boolean
   /** Windows printer name (exact) — used by QZ Tray and the optional print agent */
   customerPrinterName: string
   kitchen1PrinterName: string
@@ -15,17 +17,28 @@ export type PrintPrinterConfig = {
   printAgentUrl: string
 }
 
+export function hasElectronPrintApi(): boolean {
+  return typeof window !== "undefined" && Boolean(window.electronAPI?.printHtml)
+}
+
 /** First-time load (no localStorage entry yet). Change in Settings anytime; existing saved config wins over this. */
 const defaults: PrintPrinterConfig = {
-  printBackend: isElectronApp() ? "electron" : "qz",
+  printBackend: hasElectronPrintApi() ? "electron" : "qz",
+  silentPrint: hasElectronPrintApi(),
   customerPrinterName: "",
   kitchen1PrinterName: "",
-  kitchen2PrinterName: "", 
+  kitchen2PrinterName: "",
   printAgentUrl: "",
 }
 
+export function usesElectronSilentPrint(cfg: PrintPrinterConfig): boolean {
+  if (typeof window === "undefined") return false
+  if (!window.electronAPI?.printHtml) return false
+  return cfg.silentPrint || cfg.printBackend === "electron"
+}
+
 function normalizeBackend(v: unknown): PrintBackend {
-  if (v === "electron" && isElectronApp()) return "electron"
+  if (v === "electron" && hasElectronPrintApi()) return "electron"
   if (v === "qz" || v === "http" || v === "browser") return v
   return defaults.printBackend
 }
@@ -36,11 +49,15 @@ export function loadPrintPrinterConfig(): PrintPrinterConfig {
     if (!raw) return { ...defaults }
     const p = JSON.parse(raw) as Partial<PrintPrinterConfig>
     let printBackend = normalizeBackend(p.printBackend)
-    if (isElectronApp() && (printBackend === "qz" || printBackend === "http")) {
+    if (hasElectronPrintApi() && (printBackend === "qz" || printBackend === "http")) {
       printBackend = "electron"
     }
     return {
       printBackend,
+      silentPrint:
+        typeof p.silentPrint === "boolean"
+          ? p.silentPrint
+          : printBackend === "electron" && hasElectronPrintApi(),
       customerPrinterName: String(p.customerPrinterName ?? ""),
       kitchen1PrinterName: String(p.kitchen1PrinterName ?? ""),
       kitchen2PrinterName: String(p.kitchen2PrinterName ?? ""),
