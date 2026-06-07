@@ -6,9 +6,30 @@ const THERMAL_PAGE_WIDTH_MICRONS = 80000
 const THERMAL_PAGE_HEIGHT_MICRONS = 297000
 /** ~80mm at 96dpi — layout width matches thermal page for centered print block. */
 const PRINT_WINDOW_WIDTH_PX = 302
+/** Must match THERMAL_CONTENT_WIDTH_MM in receiptPrint.ts — left-aligned on roll. */
+const THERMAL_CONTENT_WIDTH_MM = 72
 
 function preparePrintHtml(html) {
-  return String(html).replace(/<link[^>]+fonts\.googleapis\.com[^>]*>/gi, "")
+  let doc = String(html).replace(/<link[^>]+fonts\.googleapis\.com[^>]*>/gi, "")
+  const layoutFix = `<style id="thermal-layout-fix">
+    html, body { margin: 0 !important; }
+    body {
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: flex-start !important;
+      width: 80mm !important;
+      max-width: 80mm !important;
+    }
+    .thermal-content {
+      width: ${THERMAL_CONTENT_WIDTH_MM}mm !important;
+      max-width: ${THERMAL_CONTENT_WIDTH_MM}mm !important;
+      margin: 0 !important;
+    }
+  </style>`
+  if (doc.includes("</head>")) {
+    doc = doc.replace("</head>", `${layoutFix}</head>`)
+  }
+  return doc
 }
 
 async function waitForPrintLayout(win) {
@@ -98,6 +119,7 @@ function printHtmlToPrinter(printerName, html) {
             silent: true,
             deviceName: name,
             printBackground: true,
+            scaleFactor: 100,
             margins: { marginType: "none" },
             pageSize: {
               width: THERMAL_PAGE_WIDTH_MICRONS,

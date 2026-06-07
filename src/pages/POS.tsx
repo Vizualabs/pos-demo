@@ -13,6 +13,7 @@ import { Plus, Minus, Trash2, CreditCard, Search, ChefHat } from "lucide-react"
 import { toast } from "sonner"
 import { formatCurrency } from "@/lib/utils"
 import { formatItemCode } from "@/lib/itemCode"
+import { portionLabelShort } from "@/lib/portionLabels"
 import { getAllProducts, type ProductResponseDto, type PortionSize } from "@/lib/productsApi"
 import { getAllCategories, type CategoryResponseDto } from "@/lib/categoriesApi"
 import { apiFetchBlob } from "@/lib/apiClient"
@@ -33,15 +34,9 @@ import {
 } from "@/components/POS/receiptPrint"
 
 const orderTypeLabels: Record<OrderType, string> = {
-  DINE_IN: "Dine in",
-  TAKE_AWAY: "Take away",
+  DINE_IN: "Dine In",
+  TAKE_AWAY: "Take Away",
   DELIVERY: "Delivery",
-}
-
-const orderTypeLabelSi: Record<OrderType, string> = {
-  DINE_IN: "ආපන ශාලාව",
-  TAKE_AWAY: "නිවසට ගෙන යාම",
-  DELIVERY: "ඩිලිවරි",
 }
 
 interface CartItem {
@@ -65,11 +60,7 @@ interface CartItem {
 }
 
 function kotPortionSi(c: CartItem): string | undefined {
-  if (c.portionSize === "SMALL") return "කුඩා"
-  if (c.portionSize === "MEDIUM") return "මධ්‍යම"
-  if (c.portionSize === "LARGE") return "විශාල"
-  if (c.hasPortionPricing) return "කුඩා"
-  return undefined
+  return portionLabelShort(c.portionSize) ?? (c.hasPortionPricing ? "S" : undefined)
 }
 
 function buildKitchenTickets(
@@ -77,10 +68,12 @@ function buildKitchenTickets(
   orderId: number,
   tableLabel: string,
   orderType: OrderType,
+  productById?: Map<number, ProductResponseDto>,
 ): KitchenTicketPayload[] {
   const map = new Map<Kitchen, KitchenTicketPayload["lines"]>()
   for (const c of cart) {
-    if (c.skipKitchenTicket) continue
+    const product = productById?.get(c.productId)
+    if (c.skipKitchenTicket || product?.skipKitchenTicket) continue
     const list = map.get(c.kitchen) ?? []
     const rawNote = c.lineNote?.trim()
     list.push({
@@ -100,7 +93,7 @@ function buildKitchenTickets(
       kitchenBadgeSi: k === "KITCHEN_1" ? "කුස්සිය 1" : "කුස්සිය 2",
       orderId,
       tableLabel,
-      orderTypeLabelSi: orderTypeLabelSi[orderType],
+      orderTypeLabel: orderTypeLabels[orderType],
       kitchenNote: null,
       lines: map.get(k)!,
     }))
@@ -134,11 +127,7 @@ function buildInventoryUsageFromCart(
 }
 
 function billPortionLabelForCart(c: CartItem): string | undefined {
-  if (c.portionSize === "SMALL") return "Small"
-  if (c.portionSize === "MEDIUM") return "Medium"
-  if (c.portionSize === "LARGE") return "Large"
-  if (c.hasPortionPricing) return "Small"
-  return undefined
+  return portionLabelShort(c.portionSize) ?? (c.hasPortionPricing ? "S" : undefined)
 }
 
 const POS = () => {
@@ -426,7 +415,12 @@ const POS = () => {
     const nonPortionLines = cart.filter((c) => !c.portionSize)
 
     try {
-      const orderKitchen: Kitchen = cart[0]!.kitchen
+      const orderKitchen: Kitchen =
+        cart.find((c) => {
+          if (c.skipKitchenTicket) return false
+          const p = menuItems.find((x) => x.productId === c.productId)
+          return !p?.skipKitchenTicket
+        })?.kitchen ?? "KITCHEN_1"
 
       const order = await createOrder({
         tableNumber,
@@ -511,7 +505,8 @@ const POS = () => {
     if (!order) return
 
     const tableLabel = String(selectedTable)
-    const tickets = buildKitchenTickets(cart, order.orderId, tableLabel, orderType)
+    const productById = new Map(menuItems.map((p) => [p.productId, p]))
+    const tickets = buildKitchenTickets(cart, order.orderId, tableLabel, orderType, productById)
     printKitchenTicketsForStationsSequentially(tickets, new Date())
     toast.success(
       `Order #${order.orderId} sent to kitchen. One print dialog per station (Kitchen 1 / 2) — choose each kitchen printer. Then Orders → Print customer bill → Mark as Paid.`,
@@ -533,8 +528,9 @@ const POS = () => {
       portion: billPortionLabelForCart(c),
     }))
 
+    const productById = new Map(menuItems.map((p) => [p.productId, p]))
     const kitchenTickets: KitchenTicketPayload[] =
-      orderType === "DINE_IN" ? [] : buildKitchenTickets(cart, order.orderId, tableLabel, orderType)
+      orderType === "DINE_IN" ? [] : buildKitchenTickets(cart, order.orderId, tableLabel, orderType, productById)
 
     setLastReceipt({
       customer: {
@@ -659,7 +655,7 @@ const POS = () => {
                       className="h-auto min-h-11 flex-col gap-0.5 py-2"
                       onClick={() => setDraftPortion("SMALL")}
                     >
-                      <span className="text-sm font-semibold">Small</span>
+                      <span className="text-sm font-semibold">S</span>
                       <span className="text-xs font-mono opacity-90">
                         {formatCurrency(pendingAdd.product.portionPrices?.SMALL ?? pendingAdd.product.sellingPrice)}
                       </span>
@@ -670,7 +666,7 @@ const POS = () => {
                       className="h-auto min-h-11 flex-col gap-0.5 py-2"
                       onClick={() => setDraftPortion("MEDIUM")}
                     >
-                      <span className="text-sm font-semibold">Medium</span>
+                      <span className="text-sm font-semibold">M</span>
                       <span className="text-xs font-mono opacity-90">
                         {formatCurrency(pendingAdd.product.portionPrices?.MEDIUM ?? pendingAdd.product.sellingPrice)}
                       </span>
@@ -681,14 +677,14 @@ const POS = () => {
                       className="h-auto min-h-11 flex-col gap-0.5 py-2"
                       onClick={() => setDraftPortion("LARGE")}
                     >
-                      <span className="text-sm font-semibold">Large</span>
+                      <span className="text-sm font-semibold">L</span>
                       <span className="text-xs font-mono opacity-90">
                         {formatCurrency(pendingAdd.product.portionPrices?.LARGE ?? pendingAdd.product.sellingPrice)}
                       </span>
                     </Button>
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    Select a portion. If none selected, defaults to Small ({formatCurrency(pendingAdd.product.portionPrices?.SMALL ?? pendingAdd.product.sellingPrice)}).
+                    Select a portion. If none selected, defaults to S ({formatCurrency(pendingAdd.product.portionPrices?.SMALL ?? pendingAdd.product.sellingPrice)}).
                   </p>
                 </div>
               ) : null}
@@ -895,10 +891,12 @@ const POS = () => {
                                   {item.hasPortionPricing ? (
                                     <p className="text-[10px] text-muted-foreground mt-0.5">
                                       {item.portionSize === "MEDIUM"
-                                        ? "Medium"
+                                        ? "M"
                                         : item.portionSize === "LARGE"
-                                          ? "Large"
-                                          : "Small"}
+                                          ? "L"
+                                          : item.portionSize === "SMALL" || item.hasPortionPricing
+                                            ? "S"
+                                            : null}
                                     </p>
                                   ) : null}
                                   <p className="text-[10px] font-mono text-muted-foreground mt-0.5">

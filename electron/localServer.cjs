@@ -4,7 +4,7 @@ const path = require("path")
 
 const DEFAULT_PORT = 19500
 const PROXY_PREFIXES = ["/api", "/files", "/uploads", "/images"]
-const API_TARGET = (process.env.POS_API_TARGET || "http://34.29.70.169:8080").replace(/\/+$/, "")
+const API_TARGET = (process.env.POS_API_TARGET || "http://35.223.93.6:8080").replace(/\/+$/, "")
 
 let server = null
 let serverUrl = ""

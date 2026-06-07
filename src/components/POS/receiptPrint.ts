@@ -41,7 +41,8 @@ export type KitchenTicketPayload = {
   kitchenBadgeSi: string
   orderId: number
   tableLabel: string
-  orderTypeLabelSi: string
+  /** English on KOT — e.g. Take Away, Dine In */
+  orderTypeLabel: string
   /** @deprecated Line notes are per-item; footer uses standard prep text only. */
   kitchenNote?: string | null
   lines: KitchenTicketLine[]
@@ -55,10 +56,10 @@ export type OrderBillsPayload = {
 const kotLabels = {
   title: "මුළුතැන්ගෙයි ඇණවුම", // Kitchen Order එකට වඩාත් ගැළපෙන වචනය
   subtitle: "(මිල ගණන් ඇතුළත් නොවේ)", // වඩාත් පැහැදිලියි
-  orderNo: "ඇණවුම් අංකය",
-  table: "මේස අංකය",
-  orderType: "ඇණවුම් වර්ගය",
-  time: "වේලාව",
+  orderNo: "Order No",
+  table: "Table No",
+  orderType: "Order Type",
+  time: "Time",
   item: "අයිතමය / විස්තරය",
   qty: "ප්‍රමාණය",
   note: "විශේෂ සටහන්", // Note එකට වඩාත් වෘත්තීය පෙනුමක් ලබා දෙයි
@@ -68,7 +69,7 @@ const kotLabels = {
 
 /** Labels for customer receipt preview + thermal print (shared). */
 export const customerReceiptDialogLabels = {
-  restaurant: "Madhara Restaurant",
+  restaurant: "Madara Restaurant",
   receipt: "Customer Receipt",
   invoice: "Invoice",
   dateTime: "Date & Time",
@@ -118,7 +119,8 @@ function formatReceiptDateTime(d: Date): { date: string; time: string } {
 
 function kotLineDisplay(line: KitchenTicketLine) {
   const si = line.nameSi?.trim()
-  return si && si.length > 0 ? si : line.nameEn
+  if (si && si.length > 0) return si
+  return line.nameEn
 }
 
 function kotLineItemCell(line: KitchenTicketLine): string {
@@ -262,6 +264,9 @@ export const CUSTOMER_BILL_PRINT_STYLES = `
     font-weight: 700;
     line-height: 1.35;
     width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
   }
   .c-top { text-align: center; padding: 6px 0 8px; border-bottom: 2px solid #000; }
   .c-logo-wrap { padding: 0 0 6px; text-align: center; }
@@ -276,7 +281,7 @@ export const CUSTOMER_BILL_PRINT_STYLES = `
   .c-meta-row > span:first-child { color: #000; font-weight: 700; }
   .c-meta-v { font-weight: 800; text-align: right; word-break: break-word; color: #000; }
   .c-meta-sm { font-size: 9px; font-weight: 700; color: #000; }
-  .c-items-head { display: grid; grid-template-columns: 1fr 2rem 3.8rem; gap: 4px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: #000; padding-bottom: 3px; border-bottom: 1px solid #000; }
+  .c-items-head { display: grid; grid-template-columns: 1fr 1.75rem 3.2rem; gap: 3px; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: #000; padding-bottom: 3px; border-bottom: 1px solid #000; }
   .c-col-qty { text-align: center; }
   .c-col-amt { text-align: right; }
   .c-items { margin-top: 2px; }
@@ -312,12 +317,12 @@ const KOT_PRINT_STYLES = `
   .kot-single {
     page-break-after: auto;
     width: 100%;
-    font-family: 'Iskoola Pota', 'Nirmala UI', 'Segoe UI', Arial, sans-serif;
-    font-size: 12px;
+    font-family: 'Iskoola Pota', 'Nirmala UI', 'Noto Sans Sinhala', 'Segoe UI', Arial, sans-serif;
+    font-size: 16px;
     color: #000;
   }
   .kot-title {
-    font-size: 1.15rem;
+    font-size: 1.6rem;
     letter-spacing: 0.3px;
     border-bottom: 2px solid #000;
     padding-bottom: 6px;
@@ -327,16 +332,16 @@ const KOT_PRINT_STYLES = `
     color: #000;
   }
   .kot-subtitle {
-    font-size: 0.8rem;
+    font-size: 1.1rem;
     font-weight: 700;
     color: #000;
     text-align: center;
     margin: 4px 0 8px;
   }
   .kot-table {
-    font-size: 0.95rem;
+    font-size: 1.25rem;
     font-weight: 700;
-    line-height: 1.5;
+    line-height: 1.55;
     width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
@@ -344,16 +349,16 @@ const KOT_PRINT_STYLES = `
   }
   .kot-table th, .kot-table td {
     text-align: left;
-    padding: 7px 4px;
+    padding: 8px 4px;
     border-bottom: 1px solid #000;
     color: #000;
     font-weight: 700;
   }
   .kot-table th:nth-child(2), .kot-table td:nth-child(2) { text-align: center; width: 3rem; font-weight: 800; }
-  .kot-table th:nth-child(3), .kot-table td:nth-child(3) { text-align: left; word-break: break-word; font-size: 0.95rem; }
+  .kot-table th:nth-child(3), .kot-table td:nth-child(3) { text-align: left; word-break: break-word; font-size: 1.2rem; }
   .kot-table th { font-weight: 800; }
   .prep-note {
-    font-size: 0.9rem;
+    font-size: 1.1rem;
     font-weight: 700;
     margin-top: 14px;
     text-align: center;
@@ -361,12 +366,16 @@ const KOT_PRINT_STYLES = `
     padding-top: 8px;
     color: #000;
   }
-  .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; background: #000; color: #fff; font-size: 0.85rem; font-weight: 800; margin: 8px 0; }
+  .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; background: #000; color: #fff; font-size: 1.05rem; font-weight: 800; margin: 8px 0; }
   .kot-page { page-break-after: always; }
   .kot-page:last-child { page-break-after: auto; }
-  .kot-meta { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 4px; font-size: 0.85rem; font-weight: 700; margin-top: 8px; color: #000; align-items: baseline; }
+  .kot-meta { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; row-gap: 4px; font-size: 1.1rem; font-weight: 700; margin-top: 8px; color: #000; align-items: baseline; }
   .kot-meta > span:nth-child(odd) { color: #000; font-weight: 800; }
   .kot-meta > span:nth-child(even) { text-align: right; font-weight: 800; color: #000; }
+  @media print {
+    .kot-single { font-size: 16px !important; }
+    .kot-table, .kot-table th:nth-child(3), .kot-table td:nth-child(3) { font-size: 1.25rem !important; }
+  }
 `
 
 function renderKotInnerHtml(ticket: KitchenTicketPayload, d: Date) {
@@ -387,7 +396,7 @@ function renderKotInnerHtml(ticket: KitchenTicketPayload, d: Date) {
     <div class="kot-meta">
       <span>${kotLabels.orderNo}:</span><span>#${ticket.orderId}</span>
       <span>${kotLabels.table}:</span><span>${escapeHtml(ticket.tableLabel)}</span>
-      <span>${kotLabels.orderType}:</span><span>${escapeHtml(ticket.orderTypeLabelSi)}</span>
+      <span>${kotLabels.orderType}:</span><span>${escapeHtml(ticket.orderTypeLabel)}</span>
       <span>${kotLabels.time}:</span><span>${escapeHtml(d.toLocaleString())}</span>
     </div>
     <table class="kot-table">
@@ -402,42 +411,63 @@ function renderKotInnerHtml(ticket: KitchenTicketPayload, d: Date) {
   `
 }
 
-/** 80mm roll — equal left/right padding centers content on physical paper. */
+/** 80mm roll — left-aligned content (no left margin from centering). */
+const THERMAL_PAGE_WIDTH_MM = 80
+const THERMAL_CONTENT_WIDTH_MM = 72
+
 const THERMAL_BASE_STYLES = `
-      @page { size: 80mm auto; margin: 0; }
+      @page { size: ${THERMAL_PAGE_WIDTH_MM}mm auto; margin: 0; }
       html {
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
-        width: 80mm;
+        width: ${THERMAL_PAGE_WIDTH_MM}mm;
+        height: auto;
         margin: 0;
         padding: 0;
         box-sizing: border-box;
       }
       body {
-        width: 80mm;
-        max-width: 80mm;
+        width: ${THERMAL_PAGE_WIDTH_MM}mm;
+        max-width: ${THERMAL_PAGE_WIDTH_MM}mm;
         margin: 0;
-        padding: 2mm 5mm;
+        padding: 2mm 0 2mm 0;
         box-sizing: border-box;
         overflow: visible;
         color: #000;
         background: #fff;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
       }
       .thermal-content {
         display: block;
-        width: 100%;
-        max-width: 100%;
+        width: ${THERMAL_CONTENT_WIDTH_MM}mm;
+        max-width: ${THERMAL_CONTENT_WIDTH_MM}mm;
         margin: 0;
         padding: 0;
         text-align: left;
         box-sizing: border-box;
         background: #fff;
+        flex-shrink: 0;
       }
       @media print {
         html, body { height: auto !important; min-height: 0 !important; overflow: visible !important; }
-        html { width: 80mm !important; margin: 0 !important; padding: 0 !important; }
-        body { width: 80mm !important; max-width: 80mm !important; margin: 0 !important; padding: 2mm 5mm !important; }
-        .thermal-content { display: block !important; width: 100% !important; max-width: 100% !important; margin: 0 !important; }
+        html { width: ${THERMAL_PAGE_WIDTH_MM}mm !important; margin: 0 !important; padding: 0 !important; }
+        body {
+          width: ${THERMAL_PAGE_WIDTH_MM}mm !important;
+          max-width: ${THERMAL_PAGE_WIDTH_MM}mm !important;
+          margin: 0 !important;
+          padding: 2mm 0 2mm 0 !important;
+          display: flex !important;
+          flex-direction: column !important;
+          align-items: flex-start !important;
+        }
+        .thermal-content {
+          display: block !important;
+          width: ${THERMAL_CONTENT_WIDTH_MM}mm !important;
+          max-width: ${THERMAL_CONTENT_WIDTH_MM}mm !important;
+          margin: 0 !important;
+        }
       }
 `
 

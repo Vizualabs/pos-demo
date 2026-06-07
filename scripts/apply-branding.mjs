@@ -176,7 +176,7 @@ Printers:
 - App Settings එකේ "Show Windows printers" → exact names copy කරන්න
 
 සටහන:
-- Internet ඕනේ (server: 34.29.70.169)
+- Internet ඕනේ (server: 35.223.93.6)
 - App එක browser වගේ server UI load කරනවා
 - QZ Tray / print-agent install කරන්න ඕනේ නෑ
 

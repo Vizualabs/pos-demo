@@ -503,9 +503,13 @@ const MenuItems = () => {
   const handleDelete = async (productId: number) => {
     setIsDeleting(true)
     try {
-      await deleteProduct(productId)
+      const result = await deleteProduct(productId)
       setItems((prev) => prev.filter((p) => p.productId !== productId))
-      toast.success("Menu item deleted.")
+      toast.success(
+        result.mode === "hidden"
+          ? "Item removed from menu (used in past orders — hidden, not permanently deleted)."
+          : "Menu item deleted.",
+      )
       setDeleteTarget(null)
     } catch (error) {
       console.error(error)
@@ -669,14 +673,15 @@ const MenuItems = () => {
 
                 {!newItem.skipKitchenTicket && (
                   <div className="grid gap-2">
-                    <Label htmlFor="item-name-si">Kitchen ticket name (Sinhala, optional)</Label>
+                    <Label htmlFor="item-name-si">Kitchen ticket name (Sinhala)</Label>
                     <Input
                       id="item-name-si"
                       value={newItem.nameSinhala}
                       onChange={(e) => setNewItem({ ...newItem, nameSinhala: e.target.value })}
-                      placeholder="Shown on Sinhala KOT; English name if left empty"
-                      style={{ fontFamily: "'Noto Sans Sinhala', system-ui, sans-serif" }}
+                      placeholder="KOT එකේ පෙනෙන්නේ මේ Sinhala නම — English නෙමෙයි"
+                      style={{ fontFamily: "'Noto Sans Sinhala', 'Iskoola Pota', system-ui, sans-serif" }}
                     />
+                    <p className="text-xs text-muted-foreground">Kitchen ticket print වල item name විදිහට මේ field එක use වෙනවා.</p>
                   </div>
                 )}
 

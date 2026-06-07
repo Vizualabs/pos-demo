@@ -12,7 +12,7 @@ const useViteDevServer = process.env.ELECTRON_DEV === "true"
 /** Local preview: vite preview URL (http — avoids file:// white screen). */
 const previewWebUrl = process.env.ELECTRON_PREVIEW?.trim() || ""
 /** Optional remote UI — off by default; packaged app uses bundled UI like electron:preview. */
-const POS_WEB_URL = process.env.POS_WEB_URL || "http://34.29.70.169:5000"
+const POS_WEB_URL = process.env.POS_WEB_URL || "http://35.223.93.6:5000"
 const useRemoteWebUi = process.env.POS_USE_REMOTE_UI === "1"
 let mainWindow = null
 

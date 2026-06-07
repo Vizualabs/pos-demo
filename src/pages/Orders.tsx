@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import { cn, formatCurrency } from "@/lib/utils"
 import { ORDER_DELETE_AUTH } from "@/config/orderDeleteCredentials"
 import { loadJson, saveJson } from "@/lib/demoPersistence"
+import { portionLabelShort } from "@/lib/portionLabels"
 import { getAllProducts, type ProductResponseDto } from "@/lib/productsApi"
 import { applyInventoryUsageDeductions } from "@/lib/inventoryApi"
 import {
@@ -97,27 +98,17 @@ function mergeOrderResponseIntoUi(existing: UiOrder, fromApi: OrderResponseDto):
 }
 
 const orderTypeLabels: Record<OrderType, string> = {
-  DINE_IN: "Dine in",
-  TAKE_AWAY: "Take away",
+  DINE_IN: "Dine In",
+  TAKE_AWAY: "Take Away",
   DELIVERY: "Delivery",
-}
-const orderTypeLabelSi: Record<OrderType, string> = {
-  DINE_IN: "ආපන ශාලාව",
-  TAKE_AWAY: "නිවසට ගෙන යාම",
-  DELIVERY: "ඩිලිවරි",
 }
 
 function portionLabelForBill(p: PortionType | null | undefined): string | undefined {
-  if (p === "SMALL") return "Small"
-  if (p === "MEDIUM") return "Medium"
-  if (p === "LARGE") return "Large"
-  return undefined
+  return portionLabelShort(p ?? undefined)
 }
+
 function portionLabelSi(p: PortionType | null | undefined): string | undefined {
-  if (p === "SMALL") return "කුඩා"
-  if (p === "MEDIUM") return "මධ්‍යම"
-  if (p === "LARGE") return "විශාල"
-  return undefined
+  return portionLabelShort(p ?? undefined)
 }
 
 function buildOrderBillPayload(order: UiOrder, paymentLabel = ""): OrderBillsPayload {
@@ -178,7 +169,7 @@ function buildKitchenTicketsForNewDraftLines(
       kitchenBadgeSi: k === "KITCHEN_1" ? "කුස්සිය 1" : "කුස්සිය 2",
       orderId: order.orderId,
       tableLabel,
-      orderTypeLabelSi: orderTypeLabelSi[order.orderType],
+      orderTypeLabel: orderTypeLabels[order.orderType],
       kitchenNote: null,
       lines: byKitchen.get(k)!,
     }))
@@ -939,7 +930,7 @@ function EditOrderDialog({
           line.portionType !== "MEDIUM" &&
           line.portionType !== "LARGE"
         ) {
-          toast.error("Select Small, Medium, or Large for portion-priced products.")
+          toast.error("Select S, M, or L for portion-priced products.")
           return
         }
       }
@@ -1095,9 +1086,9 @@ function EditOrderDialog({
                               value={line.portionType ?? "MEDIUM"}
                               onChange={(e) => updateLinePortion(idx, parsePortionSelectValue(e.target.value))}
                             >
-                              <option value="SMALL">Small</option>
-                              <option value="MEDIUM">Medium</option>
-                              <option value="LARGE">Large</option>
+                              <option value="SMALL">S</option>
+                              <option value="MEDIUM">M</option>
+                              <option value="LARGE">L</option>
                             </select>
                           </div>
                         ) : null}
@@ -1143,9 +1134,9 @@ function EditOrderDialog({
                               value={line.portionType ?? "MEDIUM"}
                               onChange={(e) => updateNewLinePortion(idx, parsePortionSelectValue(e.target.value))}
                             >
-                              <option value="SMALL">Small</option>
-                              <option value="MEDIUM">Medium</option>
-                              <option value="LARGE">Large</option>
+                              <option value="SMALL">S</option>
+                              <option value="MEDIUM">M</option>
+                              <option value="LARGE">L</option>
                             </select>
                           </div>
                         ) : null}
