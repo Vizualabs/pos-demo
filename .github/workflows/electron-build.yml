@@ -1,5 +1,3 @@
-# Build Windows .exe (windows-latest) and Mac .dmg (macos-latest).
-# No local Mac needed — download installers from the Actions run artifacts.
 name: Build Desktop Installers
 
 on:
@@ -15,6 +13,9 @@ on:
           - mac
           - win
   push:
+    branches:
+      - main
+      - feature/mac-version
     tags:
       - "v*"
 
