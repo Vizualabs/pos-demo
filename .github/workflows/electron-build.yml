@@ -14,7 +14,6 @@ on:
           - win
   push:
     branches:
-      - main
       - feature/mac-version
     tags:
       - "v*"
