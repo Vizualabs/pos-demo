@@ -41,6 +41,7 @@ import {
   loadPrintPrinterConfig,
   savePrintPrinterConfig,
   hasElectronPrintApi,
+  printerOsSettingsLabel,
   type PrintBackend,
   type PrintPrinterConfig,
 } from "@/lib/printConfig"
@@ -57,6 +58,7 @@ const Settings = () => {
   const { logout } = useAuth()
   const GENERAL_SETTINGS_KEY = "posGeneralSettings"
   const canSilentPrint = hasElectronPrintApi()
+  const printerOs = printerOsSettingsLabel()
   const [printCfg, setPrintCfg] = useState<PrintPrinterConfig>(() => loadPrintPrinterConfig())
   const [electronPrinters, setElectronPrinters] = useState<{ name: string; isDefault: boolean }[]>([])
   const [printersLoading, setPrintersLoading] = useState(false)
@@ -387,16 +389,16 @@ const Settings = () => {
                       {canSilentPrint ? (
                         <>
                           Desktop POS app — receipts print <span className="font-medium text-foreground">silently</span>{" "}
-                          to your Windows printers (USB / LAN). Add printers in Windows first, then enter the exact name
-                          below or pick from the list.
+                          to your {printerOs.osName} printers (USB / LAN). Add printers in {printerOs.settingsPath} first,
+                          then enter the exact name below or pick from the list.
                         </>
                       ) : (
                         <>
                           For <span className="font-medium text-foreground">network / thermal printers</span> without the
                           Chrome print dialog, use <span className="font-medium text-foreground">QZ Tray</span> (install on
-                          this PC, add printers in Windows) or run the optional{" "}
+                          this PC, add printers in {printerOs.settingsPath}) or run the optional{" "}
                           <span className="font-medium text-foreground">print-agent</span> service and choose HTTP below.
-                          Printer names must match Windows exactly (Control Panel → Printers).
+                          Printer names must match {printerOs.osName} exactly ({printerOs.settingsPath}).
                         </>
                       )}
                     </p>
@@ -407,7 +409,7 @@ const Settings = () => {
                         <div>
                           <Label htmlFor="silent-print">Silent print</Label>
                           <p className="text-sm text-muted-foreground">
-                            Print receipts directly to your Windows printers — no print dialog
+                            Print receipts directly to your {printerOs.osName} printers — no print dialog
                           </p>
                         </div>
                         <Switch
@@ -463,7 +465,7 @@ const Settings = () => {
                       {printCfg.printBackend === "qz" ? (
                         <p className="text-xs text-muted-foreground">
                           Download QZ Tray from qz.io, install, then approve this site when prompted. Use the exact
-                          printer name from Windows for each slot below.
+                          printer name from {printerOs.osName} for each slot below.
                         </p>
                       ) : null}
                       {printCfg.printBackend === "http" ? (
@@ -529,7 +531,7 @@ const Settings = () => {
                               const list = await listElectronPrinters()
                               setElectronPrinters(list)
                               if (list.length === 0) {
-                                toast.message("No printers found — add them in Windows Settings → Printers")
+                                toast.message(printerOs.emptyListHint)
                               } else {
                                 toast.success(`Found ${list.length} printer(s)`)
                               }
@@ -540,7 +542,7 @@ const Settings = () => {
                             }
                           }}
                         >
-                          {printersLoading ? "Loading…" : "Show Windows printers"}
+                          {printersLoading ? "Loading…" : printerOs.listButton}
                         </Button>
                         {electronPrinters.length > 0 ? (
                           <ul className="text-xs text-muted-foreground space-y-1 max-h-32 overflow-y-auto border rounded-md p-2">

@@ -71,3 +71,26 @@ export function loadPrintPrinterConfig(): PrintPrinterConfig {
 export function savePrintPrinterConfig(c: PrintPrinterConfig): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(c))
 }
+
+export function printerOsSettingsLabel(): {
+  osName: string
+  settingsPath: string
+  listButton: string
+  emptyListHint: string
+} {
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.userAgent)
+  if (isMac) {
+    return {
+      osName: "macOS",
+      settingsPath: "System Settings → Printers & Scanners",
+      listButton: "Show macOS printers",
+      emptyListHint: "No printers found — add them in System Settings → Printers & Scanners",
+    }
+  }
+  return {
+    osName: "Windows",
+    settingsPath: "Windows Settings → Printers",
+    listButton: "Show Windows printers",
+    emptyListHint: "No printers found — add them in Windows Settings → Printers",
+  }
+}

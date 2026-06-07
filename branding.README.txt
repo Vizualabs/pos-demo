@@ -5,18 +5,39 @@ NAME වෙනස් කරන්න:
 1. Open:  branding.json
 2. Change:
    - "appName"        → Desktop shortcut / installer name (e.g. "DineMate POS")
-   - "installFolder"  → Install folder under AppData\Local
+   - "installFolder"  → Install folder under AppData\Local (Windows)
    - "windowTitle"    → Window title bar text
-3. Run:  npm run electron:build
+3. Run build (see below)
 
 ICON වෙනස් කරන්න:
 1. Square PNG හදන්න (256x256 or 512x512)
 2. Save as:  build/icon.png
-   (optional: build/icon.ico for best Windows quality)
-3. Run:  npm run electron:build
+   (Windows: build/icon.ico auto-generated on build)
+3. Run build
 
-Client ZIP එක:
-   release\DineMate-POS-Client-v*.zip  (name follows appName)
+BUILD — Windows (this PC):
+   npm run electron:build
+   Output: release\DineMate POS Setup X.X.X.exe
+           release\DineMate-POS-Client\
+
+BUILD — macOS (Mac computer required):
+   npm run electron:build:mac
+   Output: release\DineMate POS-X.X.X-mac.dmg
+           release\DineMate-POS-Client-Mac\
+
+BUILD — macOS WITHOUT a Mac (GitHub Actions — recommended):
+   1. Push this repo to GitHub
+   2. GitHub → Actions → "Build Desktop Installers" → Run workflow
+   3. Platform: choose "mac" (or "all" for Win + Mac)
+   4. When finished → Artifacts → download "DineMate-POS-mac"
+      (contains .dmg + ZIP for Mac clients)
+
+   Or tag a release to build both platforms:
+      git tag v1.1.4 && git push origin v1.1.4
+
+Client ZIP:
+   Windows: release\DineMate-POS-Setup-v*.zip
+   Mac:     release\DineMate-POS-Mac-Setup-v*.zip
 
 Note: Login page title ("DineMate") comes from the web app on the server.
       Desktop app name/icon = branding.json + build/icon.png

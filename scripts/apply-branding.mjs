@@ -20,6 +20,16 @@ pkg.build.win.signAndEditExecutable = false
 if (!pkg.build.win.target?.length) pkg.build.win.target = ["nsis"]
 pkg.build.artifactName = "${productName} Setup ${version}.${ext}"
 
+pkg.build.mac = pkg.build.mac || {}
+if (!pkg.build.mac.target?.length) pkg.build.mac.target = ["dmg", "zip"]
+pkg.build.mac.category = pkg.build.mac.category || "public.app-category.business"
+pkg.build.mac.artifactName = "${productName}-${version}-mac.${ext}"
+pkg.build.mac.identity = null
+pkg.build.mac.gatekeeperAssess = false
+pkg.build.mac.hardenedRuntime = false
+pkg.build.dmg = pkg.build.dmg || {}
+pkg.build.dmg.sign = false
+
 const logoSrc = logoSource ? join(root, logoSource) : null
 const iconDest = join(root, iconPath)
 if (logoSrc && existsSync(logoSrc)) {
@@ -40,10 +50,13 @@ if (existsSync(iconFull)) {
     console.warn("ICO generation failed, using PNG:", e instanceof Error ? e.message : e)
     pkg.build.win.icon = iconPath.replace(/\\/g, "/")
   }
+  pkg.build.mac.icon = iconPath.replace(/\\/g, "/")
 } else if (existsSync(iconIco)) {
   pkg.build.win.icon = "build/icon.ico"
+  pkg.build.mac.icon = "build/icon.png"
 } else {
   delete pkg.build.win.icon
+  delete pkg.build.mac.icon
 }
 
 writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n")
@@ -214,5 +227,81 @@ Block වෙනවා නම් ZIP + INSTALL.bat fallback දෙන්න.
 `
 writeFileSync(join(root, "installer", "SMART-APP-FIX.txt"), smartFix)
 
+const appBundle = `${appName}.app`
+const dmgFile = `${appName}-${version}-mac.dmg`
+const installMacSh = `#!/bin/bash
+set -euo pipefail
+
+APP_NAME="${appBundle}"
+INSTALL_DIR="/Applications"
+SOURCE_DIR="$(cd "$(dirname "$0")" && pwd)/app"
+
+echo ""
+echo "=========================================="
+echo "  ${appName} - Install (macOS)"
+echo "=========================================="
+echo ""
+if [ -f "$SOURCE_DIR/../VERSION.txt" ]; then cat "$SOURCE_DIR/../VERSION.txt"; fi
+echo ""
+echo "Installing to: $INSTALL_DIR/$APP_NAME"
+echo ""
+
+if [ ! -d "$SOURCE_DIR/$APP_NAME" ]; then
+  echo "[ERROR] App bundle not found in ./app/"
+  echo "Extract the full client ZIP first."
+  exit 1
+fi
+
+if [ -d "$INSTALL_DIR/$APP_NAME" ]; then
+  echo "Removing previous install..."
+  rm -rf "$INSTALL_DIR/$APP_NAME"
+fi
+
+echo "Copying app..."
+ditto "$SOURCE_DIR/$APP_NAME" "$INSTALL_DIR/$APP_NAME"
+xattr -cr "$INSTALL_DIR/$APP_NAME" 2>/dev/null || true
+
+echo ""
+echo "=========================================="
+echo "  Install complete!"
+echo "=========================================="
+echo ""
+echo "Open ${appName} from Applications."
+echo "First launch: if macOS blocks the app, right-click → Open."
+echo ""
+`
+writeFileSync(join(root, "installer", "INSTALL-MAC.sh"), installMacSh)
+
+const readmeMac = `${appName} — macOS Install
+================================
+
+Primary install:
+  Double-click "${dmgFile}" and drag ${appName} to Applications.
+
+Alternative (ZIP):
+  1. Extract ${slug}-Mac-Setup-v${version}.zip
+  2. Run: chmod +x INSTALL-MAC.sh && ./INSTALL-MAC.sh
+  3. Open ${appName} from Applications
+
+First launch (unsigned build):
+  If macOS says the app cannot be opened:
+  - Right-click ${appName} → Open → Open again
+  - Or: System Settings → Privacy & Security → Open Anyway
+
+After install:
+  1. Login to the POS
+  2. Settings → Receipt printers → enter exact printer names
+  3. Printers: System Settings → Printers & Scanners
+
+Notes:
+  - Internet required (API server: 35.223.93.6:8080)
+  - Build Mac installer on a Mac: npm run electron:build:mac
+  - Silent thermal print works via the desktop app (no QZ Tray needed)
+
+Support: vizualabs.com
+`
+writeFileSync(join(root, "installer", "README-MAC.txt"), readmeMac)
+
 console.log(`Branding applied: "${appName}"`)
-console.log(`Icon: ${pkg.build.win?.icon ?? "(default)"}`)
+console.log(`Win icon: ${pkg.build.win?.icon ?? "(default)"}`)
+console.log(`Mac icon: ${pkg.build.mac?.icon ?? "(default)"}`)

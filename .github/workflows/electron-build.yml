@@ -1,0 +1,96 @@
+# Build Windows .exe (windows-latest) and Mac .dmg (macos-latest).
+# No local Mac needed — download installers from the Actions run artifacts.
+name: Build Desktop Installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Which installer to build
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - mac
+          - win
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: electron-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-mac:
+    name: macOS DMG
+    if: >-
+      github.event_name == 'push' ||
+      github.event.inputs.platform == 'mac' ||
+      github.event.inputs.platform == 'all'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Mac installer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run electron:build:mac
+
+      - name: Upload Mac artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DineMate-POS-mac
+          path: |
+            release/*.dmg
+            release/*Mac-Setup*.zip
+            release/DineMate-POS-Client-Mac/**
+          if-no-files-found: error
+          retention-days: 30
+
+  build-win:
+    name: Windows Setup
+    if: >-
+      github.event_name == 'push' ||
+      github.event.inputs.platform == 'win' ||
+      github.event.inputs.platform == 'all'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Windows installer
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run electron:build
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DineMate-POS-win
+          path: |
+            release/*Setup*.exe
+            release/*Setup*.zip
+            release/DineMate-POS-Client/**
+          if-no-files-found: error
+          retention-days: 30
