@@ -6,12 +6,12 @@ on:
       platform:
         description: Which installer to build
         required: true
-        default: all
+        default: mac
         type: choice
         options:
-          - all
           - mac
           - win
+          - all
   push:
     branches:
       - feature/mac-version
@@ -63,10 +63,10 @@ jobs:
 
   build-win:
     name: Windows Setup
+    # Manual only — Windows .exe build on your laptop: npm run electron:build
     if: >-
-      github.event_name == 'push' ||
-      github.event.inputs.platform == 'win' ||
-      github.event.inputs.platform == 'all'
+      github.event_name == 'workflow_dispatch' &&
+      (github.event.inputs.platform == 'win' || github.event.inputs.platform == 'all')
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
