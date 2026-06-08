@@ -11,9 +11,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "electron:dev": "concurrently -k \"vite\" \"wait-on http://localhost:5000 && cross-env ELECTRON_DEV=true electron .\"",
-    "electron:build": "node scripts/apply-branding.mjs && cross-env ELECTRON=true VITE_API_BASE_URL= CSC_IDENTITY_AUTO_DISCOVERY=false vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win dir && node scripts/embed-icon.mjs && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win nsis --prepackaged release/win-unpacked && node scripts/package-client.mjs",
+    "electron:build": "node scripts/apply-branding.mjs && cross-env ELECTRON=true VITE_API_BASE_URL= CSC_IDENTITY_AUTO_DISCOVERY=false vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish never --win dir && node scripts/embed-icon.mjs && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish never --win nsis --prepackaged release/win-unpacked && node scripts/package-client.mjs",
     "electron:build:win": "npm run electron:build",
-    "electron:build:mac": "node scripts/apply-branding.mjs && cross-env ELECTRON=true VITE_API_BASE_URL= CSC_IDENTITY_AUTO_DISCOVERY=false vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg zip && node scripts/package-client-mac.mjs",
+    "electron:build:mac": "node scripts/apply-branding.mjs && cross-env ELECTRON=true VITE_API_BASE_URL= CSC_IDENTITY_AUTO_DISCOVERY=false vite build && cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --publish never --mac dmg zip && node scripts/package-client-mac.mjs",
     "electron:preview": "cross-env ELECTRON=true VITE_API_BASE_URL= vite build && concurrently -k \"vite preview --port 5001 --host 127.0.0.1\" \"wait-on http://127.0.0.1:5001 && cross-env ELECTRON_PREVIEW=http://127.0.0.1:5001 electron .\""
   },
   "dependencies": {
@@ -74,6 +74,7 @@
   "build": {
     "appId": "com.dinemate.pos",
     "productName": "DineMate POS",
+    "publish": null,
     "directories": {
       "output": "release"
     },

@@ -46,6 +46,8 @@ jobs:
       - name: Build Mac installer
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # Artifacts only — do not publish to GitHub Releases
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run electron:build:mac
 
       - name: Upload Mac artifacts
@@ -82,6 +84,7 @@ jobs:
       - name: Build Windows installer
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run electron:build
 
       - name: Upload Windows artifacts
