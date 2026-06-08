@@ -61,7 +61,7 @@ writeFileSync(
 )
 
 if (existsSync(zipPath)) rmSync(zipPath, { force: true })
-execSync(`cd "${release}" && zip -r "${zipName}" "${slug}-Client-Mac}"`, { stdio: "inherit" })
+execSync(`cd "${release}" && zip -r "${zipName}" "${slug}-Client-Mac"`, { stdio: "inherit" })
 
 console.log("")
 console.log("Mac client package ready:")
