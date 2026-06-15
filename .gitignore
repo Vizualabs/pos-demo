@@ -12,6 +12,7 @@ dist
 dist-ssr
 release
 release_old_*
+release.zip
 electron-log-test.txt
 *.local
 
