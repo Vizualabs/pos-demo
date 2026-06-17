@@ -24,7 +24,6 @@ export type PaymentMethod = "CASH" | "CARD" | "PAYPAL" | "BANK_TRANSFER" | "CASH
 export type OrderStatus = "NEW" | "PAID" | "CANCELLED" | "UPDATED"
 
 export type OrderType = "DINE_IN" | "TAKE_AWAY" | "DELIVERY"
-export type Kitchen = "KITCHEN_1" | "KITCHEN_2"
 
 export type PortionType = "SMALL" | "MEDIUM" | "LARGE"
 
@@ -49,7 +48,6 @@ export type OrderRequestDto = {
   paymentMethod: PaymentMethod
   status: OrderStatus
   orderType: OrderType
-  kitchen: Kitchen
   items: OrderItemRequestDto[]
 }
 
@@ -109,7 +107,6 @@ function normalizeOrder(raw: unknown): OrderResponseDto {
     paymentMethod: (String(r.paymentMethod ?? "CASH") as PaymentMethod) ?? "CASH",
     status: (String(r.status ?? "NEW") as OrderStatus) ?? "NEW",
     orderType: (String(r.orderType ?? "DINE_IN") as OrderType) ?? "DINE_IN",
-    kitchen: (r.kitchen === "KITCHEN_2" ? "KITCHEN_2" : "KITCHEN_1") as Kitchen,
     orderDate,
     createdAt: String(r.createdAt ?? orderDate),
     updatedAt: (r.updatedAt as string | null) ?? null,
@@ -127,7 +124,6 @@ function toBackendOrderRequest(payload: OrderRequestDto): Record<string, unknown
     paymentMethod: payload.paymentMethod,
     status: payload.status,
     orderType: payload.orderType,
-    kitchen: payload.kitchen,
     // Some backends expect this field name.
     items: orderItems,
     // Backend commonly expects this field name.

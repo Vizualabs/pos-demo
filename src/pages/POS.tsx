@@ -18,11 +18,11 @@ import { apiFetchBlob } from "@/lib/apiClient"
 import { applyInventoryUsageDeductions } from "@/lib/inventoryApi"
 import {
   createOrder,
-  type Kitchen,
   type OrderResponseDto,
   type OrderStatus,
   type OrderType,
 } from "@/lib/ordersApi"
+import type { Kitchen } from "@/lib/productsApi"
 import { createOrderItem, deleteOrderItem, getAllOrderItems } from "@/lib/orderItemsApi"
 import { SinhalaReceiptDialog } from "@/components/POS/SinhalaReceiptDialog"
 import {

@@ -1,4 +1,4 @@
-import type { Kitchen } from "@/lib/ordersApi"
+import type { Kitchen } from "@/lib/productsApi"
 import { getBrandLogoForEmbed } from "@/lib/brandLogo"
 import { loadPrintPrinterConfig } from "@/lib/printConfig"
 import { printHtmlViaQz } from "@/lib/qzPrintClient"

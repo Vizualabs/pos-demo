@@ -31,7 +31,7 @@ import {
 } from "@/lib/productsApi"
 import { createCategory, getAllCategories, type CategoryResponseDto } from "@/lib/categoriesApi"
 import { getAllInventoryItems, type InventoryItemResponseDto } from "@/lib/inventoryApi"
-import type { Kitchen } from "@/lib/ordersApi"
+import type { Kitchen } from "@/lib/productsApi"
 import { computeRecipeCostLkr } from "@/lib/recipeCost"
 import { apiFetchBlob } from "@/lib/apiClient"
 
