@@ -7,7 +7,8 @@ import {
   removeProductLocalMeta,
   setProductLocalMeta,
 } from "@/lib/productLocalMeta"
-import type { Kitchen } from "@/lib/ordersApi"
+
+export type Kitchen = "KITCHEN_1" | "KITCHEN_2"
 
 export type PortionSize = "SMALL" | "MEDIUM" | "LARGE"
 export type PortionPrices = Partial<Record<PortionSize, number>>
