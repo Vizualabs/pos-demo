@@ -1,5 +1,5 @@
 import { loadJson, saveJson } from "@/lib/demoPersistence"
-import type { Kitchen } from "@/lib/ordersApi"
+import type { Kitchen } from "@/lib/productsApi"
 
 const STORAGE_KEY = "pos_product_meta_v1"
 
