@@ -18,8 +18,8 @@ import { Label } from "@/components/ui/label"
 import { ClipboardList, Search, Pencil, Trash2, Clock, CheckCircle, XCircle, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { cn, formatCurrency } from "@/lib/utils"
-import { ORDER_DELETE_AUTH } from "@/config/orderDeleteCredentials"
 import { loadJson, saveJson } from "@/lib/demoPersistence"
+import { verifyAdminPassword } from "@/lib/securityApi"
 import { getAllProducts, type ProductResponseDto } from "@/lib/productsApi"
 import { applyInventoryUsageDeductions } from "@/lib/inventoryApi"
 import {
@@ -233,7 +233,6 @@ export default function Orders() {
   const [search, setSearch] = useState("")
   const [editingOrder, setEditingOrder] = useState<UiOrder | null>(null)
   const [deleteOrderId, setDeleteOrderId] = useState<number | null>(null)
-  const [deleteAuthUsername, setDeleteAuthUsername] = useState("")
   const [deleteAuthPassword, setDeleteAuthPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -326,11 +325,13 @@ export default function Orders() {
   }, [])
 
   const filteredBySearch = useMemo(() => {
-    const raw = search.trim()
-    if (!raw) return orders
-    if (!/^\d+$/.test(raw)) return []
-    const id = Number.parseInt(raw, 10)
-    return orders.filter((o) => o.orderId === id)
+    const q = search.trim().toLowerCase()
+    if (!q) return orders
+    return orders.filter((o) => {
+      const orderIdMatch = String(o.orderId).includes(q)
+      const tableMatch = o.tableNumber != null && String(o.tableNumber).includes(q)
+      return orderIdMatch || tableMatch
+    })
   }, [orders, search])
 
   const byStatus = (status: OrderStatus) => filteredBySearch.filter((o) => o.status === status)
@@ -409,7 +410,6 @@ export default function Orders() {
       })
       setOrders((prev) => prev.filter((o) => o.orderId !== orderId))
       setDeleteOrderId(null)
-      setDeleteAuthUsername("")
       setDeleteAuthPassword("")
       toast.success("Order deleted")
     } catch (e) {
@@ -420,21 +420,27 @@ export default function Orders() {
 
   const closeDeleteDialog = () => {
     setDeleteOrderId(null)
-    setDeleteAuthUsername("")
     setDeleteAuthPassword("")
   }
 
   const confirmDeleteWithAuth = async () => {
     if (deleteOrderId == null) return
-    const u = deleteAuthUsername.trim()
-    const p = deleteAuthPassword
-    if (u !== ORDER_DELETE_AUTH.username || p !== ORDER_DELETE_AUTH.password) {
-      toast.error("Invalid username or password")
+    const password = deleteAuthPassword
+    if (!password) {
+      toast.error("Password is required")
       return
     }
     setIsDeleting(true)
     try {
+      const result = await verifyAdminPassword(password)
+      if (!result.authenticated) {
+        toast.error(result.message || "Invalid admin password")
+        return
+      }
       await handleDelete(deleteOrderId)
+    } catch (e) {
+      console.error(e)
+      toast.error(e instanceof Error ? e.message : "Unable to verify admin credentials")
     } finally {
       setIsDeleting(false)
     }
@@ -456,8 +462,10 @@ export default function Orders() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
-                  type="text"
-                  placeholder="Order ID"
+                  type="search"
+                  name="orders-filter"
+                  autoComplete="off"
+                  placeholder="Search by order ID or table..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-9 pr-4 py-2 rounded-xl border border-border bg-background text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -567,46 +575,40 @@ export default function Orders() {
             <DialogHeader>
               <DialogTitle>Delete order</DialogTitle>
               <DialogDescription>
-                Enter the manager username and password to permanently remove order #{deleteOrderId}. This cannot be
-                undone.
+                Enter the admin password to permanently remove order #{deleteOrderId}. This cannot be undone.
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-3 py-2">
-              <div className="grid gap-2">
-                <Label htmlFor="delete-order-username">Username</Label>
-                <Input
-                  id="delete-order-username"
-                  autoComplete="username"
-                  value={deleteAuthUsername}
-                  onChange={(e) => setDeleteAuthUsername(e.target.value)}
-                  placeholder="Username"
-                />
+            <form
+              id="delete-order-form"
+              autoComplete="off"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void confirmDeleteWithAuth()
+              }}
+            >
+              <div className="grid gap-3 py-2">
+                <div className="grid gap-2">
+                  <Label htmlFor="delete-order-password">Admin password</Label>
+                  <Input
+                    id="delete-order-password"
+                    name="delete-order-admin-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={deleteAuthPassword}
+                    onChange={(e) => setDeleteAuthPassword(e.target.value)}
+                    placeholder="Password"
+                  />
+                </div>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="delete-order-password">Password</Label>
-                <Input
-                  id="delete-order-password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={deleteAuthPassword}
-                  onChange={(e) => setDeleteAuthPassword(e.target.value)}
-                  placeholder="Password"
-                />
-              </div>
-            </div>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button type="button" variant="outline" onClick={closeDeleteDialog}>
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={isDeleting}
-                onClick={() => void confirmDeleteWithAuth()}
-              >
-                {isDeleting ? "Deleting…" : "Delete order"}
-              </Button>
-            </DialogFooter>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button type="button" variant="outline" onClick={closeDeleteDialog}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="destructive" disabled={isDeleting}>
+                  {isDeleting ? "Deleting…" : "Delete order"}
+                </Button>
+              </DialogFooter>
+            </form>
           </DialogContent>
         </Dialog>
       </div>

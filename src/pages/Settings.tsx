@@ -244,9 +244,11 @@ const Settings = () => {
         throw new Error(error.message || "Failed to change password")
       }
 
-      toast.success("Password changed successfully!")
       setShowPasswordDialog(false)
       setPasswordForm({ oldPassword: "", newPassword: "", confirmPassword: "" })
+      toast.success("Password changed successfully. Please log in again with your new password.")
+      logout()
+      navigate("/", { replace: true })
     } catch (error) {
       setPasswordError(error instanceof Error ? error.message : "An error occurred")
     } finally {
