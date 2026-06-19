@@ -1,6 +1,6 @@
 import axiosClient from "@/axios"
-import axios from "axios"
 import { nowIso } from "@/lib/demoPersistence"
+import { apiFetch } from "@/lib/apiClient"
 import { getApiErrorMessage } from "@/lib/apiErrors"
 import {
   getProductLocalMeta,
@@ -448,7 +448,12 @@ function persistProductMeta(
 }
 
 export async function createProduct(payload: ProductRequestDto): Promise<ProductResponseDto> {
-  const res = await axiosClient.post<unknown>("/products", toBackendProductRequest(payload))
+  let res
+  try {
+    res = await axiosClient.post<unknown>("/products", toBackendProductRequest(payload))
+  } catch (err) {
+    throw new Error(getApiErrorMessage(err, "Failed to create product."))
+  }
   const created = normalizeProduct(res.data)
   const productId = created.productId
 
@@ -477,10 +482,14 @@ export async function createProduct(payload: ProductRequestDto): Promise<Product
 }
 
 export async function updateProduct(productId: number, payload: ProductRequestDto, skipPortionPrices = false, skipRecipe = false): Promise<ProductResponseDto> {
-  await axiosClient.patch<unknown>(
-    `/products/${productId}`,
-    toBackendProductRequest({ ...payload, productId }, skipPortionPrices, skipRecipe),
-  )
+  try {
+    await axiosClient.patch<unknown>(
+      `/products/${productId}`,
+      toBackendProductRequest({ ...payload, productId }, skipPortionPrices, skipRecipe),
+    )
+  } catch (err) {
+    throw new Error(getApiErrorMessage(err, "Failed to update product."))
+  }
 
   try {
     await syncProductMetaOnBackend(productId, {
@@ -539,15 +548,18 @@ export type DeleteProductResult = { mode: "deleted" } | { mode: "hidden" }
 
 export async function deleteProduct(productId: number): Promise<DeleteProductResult> {
   try {
-    await axiosClient.delete(`/products/${productId}`)
+    await apiFetch(`/api/products/${productId}`, { method: "DELETE" })
     removeProductLocalMeta(productId)
     return { mode: "deleted" }
   } catch (err) {
-    const status = axios.isAxiosError(err) ? err.response?.status : undefined
-    // Backend often returns 500 when product is referenced by orders — hide from menu instead.
-    if (status === 500 || status === 409 || status === 400 || status === 422) {
+    const message = err instanceof Error ? err.message : ""
+    const statusMatch = message.match(/\b(400|409|422|500)\b/)
+    if (statusMatch) {
       try {
-        await patchProduct(productId, { isAvailable: false })
+        await apiFetch(`/api/products/${productId}`, {
+          method: "PATCH",
+          body: { isAvailable: false },
+        })
         return { mode: "hidden" }
       } catch (patchErr) {
         throw new Error(getApiErrorMessage(patchErr, getApiErrorMessage(err, "Failed to delete product.")))

@@ -1,21 +1,42 @@
+import { apiFetch } from "@/lib/apiClient"
+
 export type VerifyAdminPasswordResponse = {
   authenticated: boolean
   message: string
 }
 
-const VERIFY_ADMIN_PASSWORD_API = "/api/security/verify-admin-password"
+type LoginResponse = {
+  message?: string
+  username?: string
+  roles?: string
+}
 
+/** Verify admin password via the existing login endpoint (username fixed to admin account). */
 export async function verifyAdminPassword(password: string): Promise<VerifyAdminPasswordResponse> {
-  const response = await fetch(VERIFY_ADMIN_PASSWORD_API, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ password }),
-  })
+  const p = password.trim()
 
-  if (!response.ok) {
-    throw new Error("Unable to verify admin credentials. Please try again.")
+  if (!p) {
+    return { authenticated: false, message: "Password is required" }
   }
 
-  return response.json() as Promise<VerifyAdminPasswordResponse>
+  try {
+    const data = await apiFetch<LoginResponse>("/api/security/login", {
+      method: "POST",
+      body: { username: "admin", password: p },
+    })
+
+    const roles = String(data.roles ?? "")
+    const isAdmin = roles.includes("ADMIN")
+
+    if (!isAdmin) {
+      return { authenticated: false, message: "Admin access required to delete orders" }
+    }
+
+    return { authenticated: true, message: data.message ?? "Authenticated" }
+  } catch (err) {
+    return {
+      authenticated: false,
+      message: err instanceof Error ? err.message : "Invalid admin password",
+    }
+  }
 }

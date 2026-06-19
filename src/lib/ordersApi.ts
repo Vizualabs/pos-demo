@@ -1,4 +1,5 @@
 import axiosClient from "@/axios"
+import { apiFetch } from "@/lib/apiClient"
 import { nowIso } from "@/lib/demoPersistence"
 
 export const ORDERS_CHANGED_EVENT = "pos-orders-changed"
@@ -199,6 +200,6 @@ function toBackendOrderItems(items: OrderItemRequestDto[]): Record<string, unkno
 }
 
 export async function deleteOrder(orderId: number): Promise<void> {
-  await axiosClient.delete(`/orders/${orderId}`)
+  await apiFetch(`/api/orders/${orderId}`, { method: "DELETE" })
   emitOrdersChanged()
 }

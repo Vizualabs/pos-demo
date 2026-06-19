@@ -33,6 +33,7 @@ import { createCategory, getAllCategories, type CategoryResponseDto } from "@/li
 import { getAllInventoryItems, type InventoryItemResponseDto } from "@/lib/inventoryApi"
 import type { Kitchen } from "@/lib/productsApi"
 import { computeRecipeCostLkr } from "@/lib/recipeCost"
+import { getApiErrorMessage } from "@/lib/apiErrors"
 import { apiFetchBlob } from "@/lib/apiClient"
 
 type RecipeLineForm = { itemId: number | ""; quantity: string }
@@ -45,14 +46,16 @@ function parseQuantityKg(input: string): number {
 
 const MenuItems = () => {
   const [items, setItems] = useState<ProductResponseDto[]>([])
+  /** Includes hidden/unavailable products — used for ID allocation and duplicate checks. */
+  const [allProducts, setAllProducts] = useState<ProductResponseDto[]>([])
   const [categories, setCategories] = useState<CategoryResponseDto[]>([])
   const [inventoryItems, setInventoryItems] = useState<InventoryItemResponseDto[]>([])
 
   const nextProductId = useMemo(() => {
-    if (items.length === 0) return 1
-    const ids = items.map((p) => Number(p.productId)).filter((n) => Number.isFinite(n) && n >= 1)
+    if (allProducts.length === 0) return 1
+    const ids = allProducts.map((p) => Number(p.productId)).filter((n) => Number.isFinite(n) && n >= 1)
     return ids.length > 0 ? Math.max(...ids) + 1 : 1
-  }, [items])
+  }, [allProducts])
 
   const [isLoadingCategories, setIsLoadingCategories] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -206,7 +209,8 @@ const MenuItems = () => {
         }
 
         setCategories(Array.from(unique.values()))
-        setItems(prods)
+        setAllProducts(prods)
+        setItems(prods.filter((p) => p.isAvailable !== false))
         setInventoryItems(inv)
       } catch (e) {
         console.error(e)
@@ -307,8 +311,8 @@ const MenuItems = () => {
         setUploadError("Enter a valid item ID (e.g. 15 or ITM-0015).")
         return
       }
-      if (items.some((p) => p.productId === parsedId)) {
-        setUploadError(`${formatItemCode(parsedId)} is already used. Choose another ID.`)
+      if (allProducts.some((p) => p.productId === parsedId)) {
+        setUploadError(`${formatItemCode(parsedId)} is already used (including hidden menu items). Choose another ID.`)
         return
       }
       createProductId = parsedId
@@ -443,6 +447,7 @@ const MenuItems = () => {
         }
 
         saved = merged
+        setAllProducts((prev) => prev.map((p) => (p.productId === merged.productId ? merged : p)))
         setItems((prev) => prev.map((p) => (p.productId === merged.productId ? merged : p)))
         toast.success(`Item ${formatItemCode(merged.productId)} updated`)
       } else {
@@ -466,6 +471,7 @@ const MenuItems = () => {
         }
 
         saved = merged
+        setAllProducts((prev) => [...prev, merged])
         setItems((prev) => [...prev, merged])
         toast.success(`Item saved with ID ${formatItemCode(merged.productId)}`)
       }
@@ -474,13 +480,12 @@ const MenuItems = () => {
       if (imageFile) {
         try {
           const withImage = await uploadProductImage(saved.productId, imageFile)
-          setItems((prev) =>
-            prev.map((p) => {
-              if (p.productId !== withImage.productId) return p
-              // Image endpoint may not return recipe; keep the just-saved recipe.
-              return { ...p, ...withImage, recipe: withImage.recipe.length > 0 ? withImage.recipe : p.recipe }
-            }),
-          )
+          const applyImage = (p: ProductResponseDto) => {
+            if (p.productId !== withImage.productId) return p
+            return { ...p, ...withImage, recipe: withImage.recipe.length > 0 ? withImage.recipe : p.recipe }
+          }
+          setAllProducts((prev) => prev.map(applyImage))
+          setItems((prev) => prev.map(applyImage))
         } catch (e) {
           console.error(e)
           setUploadError("Image upload failed. Product was saved without updating the image.")
@@ -492,7 +497,7 @@ const MenuItems = () => {
       setIsDialogOpen(false)
     } catch (e) {
       console.error(e)
-      const message = e instanceof Error ? e.message : "Failed to save product. Please try again."
+      const message = getApiErrorMessage(e, "Failed to save product. Please try again.")
       setUploadError(message)
       toast.error(message)
     } finally {
@@ -504,6 +509,7 @@ const MenuItems = () => {
     setIsDeleting(true)
     try {
       const result = await deleteProduct(productId)
+      setAllProducts((prev) => prev.filter((p) => p.productId !== productId))
       setItems((prev) => prev.filter((p) => p.productId !== productId))
       toast.success(
         result.mode === "hidden"
@@ -513,7 +519,7 @@ const MenuItems = () => {
       setDeleteTarget(null)
     } catch (error) {
       console.error(error)
-      const message = error instanceof Error ? error.message : "Failed to delete product."
+      const message = getApiErrorMessage(error, "Failed to delete product.")
       setUploadError(message)
       toast.error(message)
     } finally {
