@@ -13,8 +13,8 @@ export function normalizeProfileImageUrl(url: string): string {
   if (trimmed.startsWith("data:") || trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     return trimmed
   }
+  if (trimmed.startsWith("/files/")) return trimmed
   if (trimmed.startsWith("/api/")) return trimmed
-  if (trimmed.startsWith("/files/")) return `/api${trimmed}`
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`
 }
 
@@ -95,9 +95,27 @@ function parseUploadResponse(data: unknown): string | null {
 const UPLOAD_ATTEMPTS: { path: string; field: string }[] = [
   { path: "/api/security/user/profile-picture", field: "image" },
   { path: "/api/security/user/profile-picture", field: "file" },
-  { path: "/api/security/user/image", field: "image" },
-  { path: "/api/security/user/avatar", field: "image" },
 ]
+
+export async function syncProfileAvatarFromServer(): Promise<string | null> {
+  try {
+    const res = await fetch("/api/security/user/details", {
+      method: "GET",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    const url = extractProfileImageFromUser(data)
+    if (url) {
+      setStoredProfileAvatar(url)
+      return url
+    }
+    return null
+  } catch {
+    return null
+  }
+}
 
 /** Upload to Spring Boot if available; otherwise save locally for this browser */
 export async function uploadProfileAvatar(file: File): Promise<{ url: string; savedOnServer: boolean }> {
