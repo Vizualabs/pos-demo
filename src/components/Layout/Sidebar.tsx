@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import type { FeatureKey } from "@/config/features";
 import { featureConfigs } from "@/config/features";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
-import { PROFILE_AVATAR_CHANGED, resolveProfileAvatarUrl } from "@/lib/profileAvatar";
+import { PROFILE_AVATAR_CHANGED, resolveProfileAvatarUrl, syncProfileAvatarFromServer } from "@/lib/profileAvatar";
 
 type MenuItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -46,7 +46,7 @@ const menuItems: MenuItem[] = [
 
 export const Sidebar = () => {
   const location = useLocation();
-  const { getUserRole } = useAuth();
+  const { getUserRole, isLoggedIn } = useAuth();
   const [avatarUrl, setAvatarUrl] = useState(() => resolveProfileAvatarUrl());
   const role = getUserRole();
 
@@ -56,6 +56,13 @@ export const Sidebar = () => {
     window.addEventListener(PROFILE_AVATAR_CHANGED, sync);
     return () => window.removeEventListener(PROFILE_AVATAR_CHANGED, sync);
   }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn()) return;
+    void syncProfileAvatarFromServer().then((url) => {
+      if (url) setAvatarUrl(url);
+    });
+  }, [isLoggedIn]);
   const visibleMenuItems = menuItems.filter((item) => !item.visibleFor || item.visibleFor.includes(role));
   const displayRole = role === "ADMIN" ? "Admin" : "User";
 
