@@ -24,6 +24,7 @@ import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import MenuItems from "./pages/MenuItems";
 import Orders from "./pages/Orders";
+import QRCodeGenerator from "./pages/QRCodeGenerator";
 
 const queryClient = new QueryClient();
 
@@ -59,6 +60,14 @@ const AppRoutes = () => {
                 element={
                   <ProtectedRoute allowedRoles={["ADMIN"]}>
                     <QRMenu />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/qr-codes"
+                element={
+                  <ProtectedRoute allowedRoles={["ADMIN"]}>
+                    <QRCodeGenerator />
                   </ProtectedRoute>
                 }
               />

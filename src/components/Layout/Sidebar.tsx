@@ -35,6 +35,7 @@ const menuItems: MenuItem[] = [
   { icon: UtensilsCrossed, label: "Menu Items", path: "/menu-items", badge: null, visibleFor: ["ADMIN"] },
   { icon: ClipboardList, label: "Orders", path: "/orders", badge: null },
   { icon: QrCode, label: "QR Ordering", path: "/qr-menu", badge: null, featureKey: "qrOrdering", visibleFor: ["ADMIN"] },
+  { icon: QrCode, label: "QR Codes", path: "/qr-codes", badge: "New", visibleFor: ["ADMIN"] },
   { icon: Package, label: "Inventory", path: "/inventory", badge: null, visibleFor: ["ADMIN"] },
   { icon: Users, label: "Staff & HR", path: "/staff", badge: null, featureKey: "staffHr", visibleFor: ["ADMIN"] },
   { icon: Calendar, label: "Attendance", path: "/attendance", badge: null, featureKey: "attendance", visibleFor: ["ADMIN"] },
