@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import { cn, formatCurrency } from "@/lib/utils"
 import { loadJson, saveJson } from "@/lib/demoPersistence"
 import { portionLabelShort } from "@/lib/portionLabels"
+import { useAuth } from "@/hooks/useAuth"
 import { verifyAdminPassword } from "@/lib/securityApi"
 import { getAllProducts, type ProductResponseDto } from "@/lib/productsApi"
 import { applyInventoryUsageDeductions } from "@/lib/inventoryApi"
@@ -228,6 +229,7 @@ function normalizePaymentMethod(value: unknown): PaymentMethod {
 }
 
 export default function Orders() {
+  const { isAdmin } = useAuth()
   const [orders, setOrders] = useState<UiOrder[]>([])
   const [products, setProducts] = useState<ProductResponseDto[]>([])
   const [search, setSearch] = useState("")
@@ -425,8 +427,12 @@ export default function Orders() {
 
   const confirmDeleteWithAuth = async () => {
     if (deleteOrderId == null) return
+    if (!isAdmin()) {
+      toast.error("Admin access required to delete orders")
+      return
+    }
     const password = deleteAuthPassword
-    if (!password) {
+    if (!password.trim()) {
       toast.error("Password is required")
       return
     }

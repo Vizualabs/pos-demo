@@ -5,13 +5,7 @@ export type VerifyAdminPasswordResponse = {
   message: string
 }
 
-type LoginResponse = {
-  message?: string
-  username?: string
-  roles?: string
-}
-
-/** Verify admin password via the existing login endpoint (username fixed to admin account). */
+/** Verify admin password without creating a new login session. */
 export async function verifyAdminPassword(password: string): Promise<VerifyAdminPasswordResponse> {
   const p = password.trim()
 
@@ -20,19 +14,10 @@ export async function verifyAdminPassword(password: string): Promise<VerifyAdmin
   }
 
   try {
-    const data = await apiFetch<LoginResponse>("/api/security/login", {
+    return await apiFetch<VerifyAdminPasswordResponse>("/api/security/verify-admin-password", {
       method: "POST",
-      body: { username: "admin", password: p },
+      body: { password: p },
     })
-
-    const roles = String(data.roles ?? "")
-    const isAdmin = roles.includes("ADMIN")
-
-    if (!isAdmin) {
-      return { authenticated: false, message: "Admin access required to delete orders" }
-    }
-
-    return { authenticated: true, message: data.message ?? "Authenticated" }
   } catch (err) {
     return {
       authenticated: false,
