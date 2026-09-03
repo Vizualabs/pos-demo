@@ -1,5 +1,6 @@
 import axios, { AxiosHeaders, AxiosInstance, AxiosResponse, type InternalAxiosRequestConfig } from "axios"
-import { redirectToLoginPage } from "@/lib/appNavigation"
+import { redirectToLoginPage, redirectToSuspendedPage } from "@/lib/appNavigation"
+import { isPaymentLockedResponse } from "@/lib/paymentControl"
 
 /** Dev: same-origin `/api` via Vite proxy. Prod: set VITE_API_BASE_URL to your API host. */
 function resolveAxiosBaseUrl(): string {
@@ -41,8 +42,18 @@ axiosClient.interceptors.request.use(
 axiosClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error) => {
+    const status = error?.response?.status
+    const data = error?.response?.data
+    if (isPaymentLockedResponse(status, data)) {
+      redirectToSuspendedPage(
+        typeof data?.message === "string" ? data.message : undefined,
+        typeof data?.paymentDeadline === "string" ? data.paymentDeadline : null,
+      )
+      return Promise.reject(error)
+    }
+
     const originalRequest = error?.config as InternalAxiosRequestConfig | undefined
-    if (error?.response?.status === 401 && originalRequest && !(originalRequest as { _retry?: boolean })._retry) {
+    if (status === 401 && originalRequest && !(originalRequest as { _retry?: boolean })._retry) {
       ;(originalRequest as { _retry?: boolean })._retry = true
       const refreshToken = localStorage.getItem("refresh_token")
       if (refreshToken) {
@@ -63,7 +74,7 @@ axiosClient.interceptors.response.use(
           localStorage.removeItem("refresh_token")
         }
       }
-      if (error?.response?.status === 401) {
+      if (status === 401) {
         redirectToLoginPage()
       }
     }

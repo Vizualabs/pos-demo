@@ -16,6 +16,8 @@ import {
 import { isElectronApp } from "@/lib/isElectron"
 import { electronFetchAsResponse, shouldRouteApiViaElectronMain } from "@/lib/electronFetch"
 import { AuthBackground } from "@/components/Auth/AuthBackground"
+import { PaymentWarningModal } from "@/components/Billing/PaymentWarningModal"
+import { isPaymentLockedResponse, parsePaymentAccess, type PaymentAccess } from "@/lib/paymentControl"
 
 const LOGIN_API = "/api/security/login"
 const USER_DETAILS_API = "/api/security/user/details"
@@ -31,6 +33,8 @@ const Login = () => {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [paymentWarning, setPaymentWarning] = useState<PaymentAccess | null>(null)
+  const [pendingNavigateTo, setPendingNavigateTo] = useState<string | null>(null)
 
   useEffect(() => {
     const from = (location.state as { from?: unknown } | null)?.from
@@ -39,6 +43,14 @@ const Login = () => {
       clearAuthSession()
     }
   }, [location.state, isAuthenticated])
+
+  const finishNavigation = (target: string) => {
+    if (isElectronApp()) {
+      window.location.hash = `#${target}`
+      return
+    }
+    navigate(target, { replace: true })
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -66,8 +78,19 @@ const Login = () => {
         : await fetch(loginUrl, loginInit)
 
       if (!response.ok) {
-        const message = (await response.json().catch(() => ({})))?.message
-        setError(message || "Invalid username or password.")
+        const body = await response.json().catch(() => ({}))
+        if (isPaymentLockedResponse(response.status, body)) {
+          clearAuthSession()
+          navigate("/suspended", {
+            replace: true,
+            state: {
+              message: body?.message,
+              deadline: body?.paymentDeadline,
+            },
+          })
+          return
+        }
+        setError(body?.message || "Invalid username or password.")
         return
       }
 
@@ -96,6 +119,19 @@ const Login = () => {
         ? await electronFetchAsResponse(detailsUrl, detailsInit)
         : await fetch(detailsUrl, detailsInit)
 
+      if (detailsResponse.status === 423) {
+        const body = await detailsResponse.json().catch(() => ({}))
+        clearAuthSession()
+        navigate("/suspended", {
+          replace: true,
+          state: {
+            message: body?.message,
+            deadline: body?.paymentDeadline,
+          },
+        })
+        return
+      }
+
       const user = detailsResponse.ok
         ? await detailsResponse.json().catch(() => userFromLoginResponse(data))
         : userFromLoginResponse(data)
@@ -111,15 +147,19 @@ const Login = () => {
       }
 
       persistAuthSession(user, token)
-      markAuthenticated()
 
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname
       const target = from || "/pos"
-      if (isElectronApp()) {
-        window.location.hash = `#${target}`
+      const payment = parsePaymentAccess(data)
+
+      if (payment?.showWarning) {
+        setPaymentWarning(payment)
+        setPendingNavigateTo(target)
         return
       }
-      navigate(target, { replace: true })
+
+      markAuthenticated()
+      finishNavigation(target)
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Login failed"
       setError(`Login failed: ${msg}`)
@@ -133,7 +173,6 @@ const Login = () => {
       <AuthBackground />
 
       <div className="w-full max-w-md relative z-10 auth-card-in">
-        {/* Logo/Brand Section */}
         <div className="text-center mb-8">
           <h1 className="auth-gradient-text text-4xl font-bold mb-2">
             DineMate
@@ -144,7 +183,6 @@ const Login = () => {
           </p>
         </div>
 
-        {/* Login Card */}
         <Card className="modern-card shadow-modern-lg border border-border bg-card">
           <CardHeader className="space-y-1 pb-6">
             <CardTitle className="text-2xl font-bold text-center text-foreground">Welcome To Madara Resturant </CardTitle>
@@ -212,7 +250,6 @@ const Login = () => {
           </CardContent>
         </Card>
 
-        {/* Footer */}
         <div className="mt-8 text-center space-y-1">
           <p className="text-muted-foreground/70 text-xs">
             © 2026 DineMate. All rights reserved.
@@ -230,6 +267,18 @@ const Login = () => {
           </p>
         </div>
       </div>
+
+      {paymentWarning?.showWarning && (
+        <PaymentWarningModal
+          payment={paymentWarning}
+          onClose={() => {
+            setPaymentWarning(null)
+            markAuthenticated()
+            finishNavigation(pendingNavigateTo || "/pos")
+            setPendingNavigateTo(null)
+          }}
+        />
+      )}
     </div>
   )
 }

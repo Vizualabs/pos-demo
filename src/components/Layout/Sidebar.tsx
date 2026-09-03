@@ -31,9 +31,9 @@ type MenuItem = {
 
 const menuItems: MenuItem[] = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard", badge: null, visibleFor: ["ADMIN"] },
-  { icon: ShoppingCart, label: "POS Terminal", path: "/pos", badge: "Hot" },
+  { icon: ShoppingCart, label: "POS Terminal", path: "/pos", badge: "Hot", visibleFor: ["ADMIN", "USER"] },
   { icon: UtensilsCrossed, label: "Menu Items", path: "/menu-items", badge: null, visibleFor: ["ADMIN"] },
-  { icon: ClipboardList, label: "Orders", path: "/orders", badge: null },
+  { icon: ClipboardList, label: "Orders", path: "/orders", badge: null, visibleFor: ["ADMIN", "USER"] },
   { icon: QrCode, label: "QR Ordering", path: "/qr-menu", badge: null, featureKey: "qrOrdering", visibleFor: ["ADMIN"] },
   { icon: Package, label: "Inventory", path: "/inventory", badge: null, visibleFor: ["ADMIN"] },
   { icon: Users, label: "Staff & HR", path: "/staff", badge: null, featureKey: "staffHr", visibleFor: ["ADMIN"] },

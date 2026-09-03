@@ -34,6 +34,10 @@ export const getRoleFromStoredUser = (user: unknown): UserRole => {
   if (!roleNames.length && typeof u.roles === "string") {
     const matches = u.roles.match(/ROLE_[A-Z_]+/g) ?? []
     for (const m of matches) roleNames.push(normalizeRole(m))
+    if (!roleNames.length) {
+      const plain = u.roles.match(/\b(ADMIN|USER)\b/gi) ?? []
+      for (const m of plain) roleNames.push(normalizeRole(m))
+    }
   }
 
   if (!roleNames.length && Array.isArray(u.roles)) {

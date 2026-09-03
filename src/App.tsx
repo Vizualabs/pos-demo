@@ -11,6 +11,7 @@ import { RootRoute } from "./components/Auth/RootRoute";
 import { LoginRoute } from "./components/Auth/LoginRoute";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import PaymentSuspended from "./pages/PaymentSuspended";
 import Dashboard from "./pages/Dashboard";
 import POS from "./pages/POS";
 import QRMenu from "./pages/QRMenu";
@@ -37,6 +38,7 @@ const AppRoutes = () => {
               <Route path="/login" element={<LoginRoute />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
+              <Route path="/suspended" element={<PaymentSuspended />} />
 
               <Route
                 path="/dashboard"

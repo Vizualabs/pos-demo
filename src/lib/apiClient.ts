@@ -124,6 +124,22 @@ export async function apiFetch<T>(
   })
 
   if (!res.ok) {
+    if (res.status === 423) {
+      const { redirectToSuspendedPage } = await import("@/lib/appNavigation")
+      let message: string | undefined
+      let deadline: string | null = null
+      try {
+        const data = await res.clone().json()
+        if (data && typeof data === "object") {
+          const rec = data as Record<string, unknown>
+          if (typeof rec.message === "string") message = rec.message
+          if (typeof rec.paymentDeadline === "string") deadline = rec.paymentDeadline
+        }
+      } catch {
+        // ignore parse errors
+      }
+      redirectToSuspendedPage(message, deadline)
+    }
     const msg = await readErrorMessage(res)
     const prefix = `${res.status} ${res.statusText}`
     throw new Error(msg.startsWith(prefix) ? msg : `${prefix}: ${msg}`)
