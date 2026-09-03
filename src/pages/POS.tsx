@@ -39,6 +39,12 @@ const orderTypeLabels: Record<OrderType, string> = {
   DELIVERY: "Delivery",
 }
 
+const orderTypeLabelSi: Record<OrderType, string> = {
+  DINE_IN: "ආපන ශාලාව",
+  TAKE_AWAY: "නිවසට ගෙන යාම",
+  DELIVERY: "ඩිලිවරි",
+}
+
 interface CartItem {
   lineKey: string
   productId: number
@@ -60,7 +66,11 @@ interface CartItem {
 }
 
 function kotPortionSi(c: CartItem): string | undefined {
-  return portionLabelShort(c.portionSize) ?? (c.hasPortionPricing ? "S" : undefined)
+  if (c.portionSize === "SMALL") return "කුඩා"
+  if (c.portionSize === "MEDIUM") return "මධ්‍යම"
+  if (c.portionSize === "LARGE") return "විශාල"
+  if (c.hasPortionPricing) return "කුඩා"
+  return undefined
 }
 
 function buildKitchenTickets(
@@ -93,7 +103,7 @@ function buildKitchenTickets(
       kitchenBadgeSi: k === "KITCHEN_1" ? "කුස්සිය 1" : "කුස්සිය 2",
       orderId,
       tableLabel,
-      orderTypeLabel: orderTypeLabels[orderType],
+      orderTypeLabel: orderTypeLabelSi[orderType],
       kitchenNote: null,
       lines: map.get(k)!,
     }))
@@ -415,13 +425,6 @@ const POS = () => {
     const nonPortionLines = cart.filter((c) => !c.portionSize)
 
     try {
-      const orderKitchen: Kitchen =
-        cart.find((c) => {
-          if (c.skipKitchenTicket) return false
-          const p = menuItems.find((x) => x.productId === c.productId)
-          return !p?.skipKitchenTicket
-        })?.kitchen ?? "KITCHEN_1"
-
       const order = await createOrder({
         tableNumber,
         totalAmount,
@@ -430,7 +433,6 @@ const POS = () => {
         paymentMethod: "CASH",
         status,
         orderType,
-        kitchen: orderKitchen,
         items,
       })
 
@@ -655,7 +657,7 @@ const POS = () => {
                       className="h-auto min-h-11 flex-col gap-0.5 py-2"
                       onClick={() => setDraftPortion("SMALL")}
                     >
-                      <span className="text-sm font-semibold">S</span>
+                      <span className="text-sm font-semibold">Small</span>
                       <span className="text-xs font-mono opacity-90">
                         {formatCurrency(pendingAdd.product.portionPrices?.SMALL ?? pendingAdd.product.sellingPrice)}
                       </span>
@@ -666,7 +668,7 @@ const POS = () => {
                       className="h-auto min-h-11 flex-col gap-0.5 py-2"
                       onClick={() => setDraftPortion("MEDIUM")}
                     >
-                      <span className="text-sm font-semibold">M</span>
+                      <span className="text-sm font-semibold">Medium</span>
                       <span className="text-xs font-mono opacity-90">
                         {formatCurrency(pendingAdd.product.portionPrices?.MEDIUM ?? pendingAdd.product.sellingPrice)}
                       </span>
@@ -677,14 +679,14 @@ const POS = () => {
                       className="h-auto min-h-11 flex-col gap-0.5 py-2"
                       onClick={() => setDraftPortion("LARGE")}
                     >
-                      <span className="text-sm font-semibold">L</span>
+                      <span className="text-sm font-semibold">Large</span>
                       <span className="text-xs font-mono opacity-90">
                         {formatCurrency(pendingAdd.product.portionPrices?.LARGE ?? pendingAdd.product.sellingPrice)}
                       </span>
                     </Button>
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    Select a portion. If none selected, defaults to S ({formatCurrency(pendingAdd.product.portionPrices?.SMALL ?? pendingAdd.product.sellingPrice)}).
+                    Select a portion. If none selected, defaults to Small ({formatCurrency(pendingAdd.product.portionPrices?.SMALL ?? pendingAdd.product.sellingPrice)}).
                   </p>
                 </div>
               ) : null}
@@ -891,12 +893,10 @@ const POS = () => {
                                   {item.hasPortionPricing ? (
                                     <p className="text-[10px] text-muted-foreground mt-0.5">
                                       {item.portionSize === "MEDIUM"
-                                        ? "M"
+                                        ? "Medium"
                                         : item.portionSize === "LARGE"
-                                          ? "L"
-                                          : item.portionSize === "SMALL" || item.hasPortionPricing
-                                            ? "S"
-                                            : null}
+                                          ? "Large"
+                                          : "Small"}
                                     </p>
                                   ) : null}
                                   <p className="text-[10px] font-mono text-muted-foreground mt-0.5">

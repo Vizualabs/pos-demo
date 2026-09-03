@@ -103,12 +103,21 @@ const orderTypeLabels: Record<OrderType, string> = {
   DELIVERY: "Delivery",
 }
 
+const orderTypeLabelSi: Record<OrderType, string> = {
+  DINE_IN: "ආපන ශාලාව",
+  TAKE_AWAY: "නිවසට ගෙන යාම",
+  DELIVERY: "ඩිලිවරි",
+}
+
 function portionLabelForBill(p: PortionType | null | undefined): string | undefined {
   return portionLabelShort(p ?? undefined)
 }
 
 function portionLabelSi(p: PortionType | null | undefined): string | undefined {
-  return portionLabelShort(p ?? undefined)
+  if (p === "SMALL") return "කුඩා"
+  if (p === "MEDIUM") return "මධ්‍යම"
+  if (p === "LARGE") return "විශාල"
+  return undefined
 }
 
 function buildOrderBillPayload(order: UiOrder, paymentLabel = ""): OrderBillsPayload {
@@ -169,7 +178,7 @@ function buildKitchenTicketsForNewDraftLines(
       kitchenBadgeSi: k === "KITCHEN_1" ? "කුස්සිය 1" : "කුස්සිය 2",
       orderId: order.orderId,
       tableLabel,
-      orderTypeLabel: orderTypeLabels[order.orderType],
+      orderTypeLabel: orderTypeLabelSi[order.orderType],
       kitchenNote: null,
       lines: byKitchen.get(k)!,
     }))
@@ -932,7 +941,7 @@ function EditOrderDialog({
           line.portionType !== "MEDIUM" &&
           line.portionType !== "LARGE"
         ) {
-          toast.error("Select S, M, or L for portion-priced products.")
+          toast.error("Select Small, Medium, or Large for portion-priced products.")
           return
         }
       }
@@ -1088,9 +1097,9 @@ function EditOrderDialog({
                               value={line.portionType ?? "MEDIUM"}
                               onChange={(e) => updateLinePortion(idx, parsePortionSelectValue(e.target.value))}
                             >
-                              <option value="SMALL">S</option>
-                              <option value="MEDIUM">M</option>
-                              <option value="LARGE">L</option>
+                              <option value="SMALL">Small</option>
+                              <option value="MEDIUM">Medium</option>
+                              <option value="LARGE">Large</option>
                             </select>
                           </div>
                         ) : null}
@@ -1136,9 +1145,9 @@ function EditOrderDialog({
                               value={line.portionType ?? "MEDIUM"}
                               onChange={(e) => updateNewLinePortion(idx, parsePortionSelectValue(e.target.value))}
                             >
-                              <option value="SMALL">S</option>
-                              <option value="MEDIUM">M</option>
-                              <option value="LARGE">L</option>
+                              <option value="SMALL">Small</option>
+                              <option value="MEDIUM">Medium</option>
+                              <option value="LARGE">Large</option>
                             </select>
                           </div>
                         ) : null}

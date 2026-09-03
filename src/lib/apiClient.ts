@@ -28,7 +28,7 @@ export function getDefaultApiBaseUrl(): string {
   return ""
 }
 
-/** Turn `/api/...` into full URL when `VITE_API_BASE_URL` is set (e.g. http://35.223.93.6:8080/api). */
+/** Turn `/api/...` into full URL when `VITE_API_BASE_URL` is set (e.g. http://136.65.34.15:8080/api). */
 export function resolveApiUrl(path: string): string {
   if (path.startsWith("http://") || path.startsWith("https://")) return path
   const base = getDefaultApiBaseUrl()

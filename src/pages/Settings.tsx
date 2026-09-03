@@ -151,10 +151,10 @@ const Settings = () => {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          username: personalInfo.username,
-          fullName: personalInfo.fullName,
-          email: personalInfo.email,
-          phoneNumber: personalInfo.phoneNumber,
+          username: personalInfo.username.trim(),
+          fullName: personalInfo.fullName.trim(),
+          email: personalInfo.email.trim(),
+          phoneNumber: personalInfo.phoneNumber.trim(),
         }),
       })
 

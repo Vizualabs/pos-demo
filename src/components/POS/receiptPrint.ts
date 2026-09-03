@@ -41,7 +41,7 @@ export type KitchenTicketPayload = {
   kitchenBadgeSi: string
   orderId: number
   tableLabel: string
-  /** English on KOT — e.g. Take Away, Dine In */
+  /** Sinhala order type on KOT — e.g. ආපන ශාලාව */
   orderTypeLabel: string
   /** @deprecated Line notes are per-item; footer uses standard prep text only. */
   kitchenNote?: string | null
@@ -56,10 +56,10 @@ export type OrderBillsPayload = {
 const kotLabels = {
   title: "මුළුතැන්ගෙයි ඇණවුම", // Kitchen Order එකට වඩාත් ගැළපෙන වචනය
   subtitle: "(මිල ගණන් ඇතුළත් නොවේ)", // වඩාත් පැහැදිලියි
-  orderNo: "Order No",
-  table: "Table No",
-  orderType: "Order Type",
-  time: "Time",
+  orderNo: "ඇණවුම් අංකය",
+  table: "මේස අංකය",
+  orderType: "ඇණවුම් වර්ගය",
+  time: "වේලාව",
   item: "අයිතමය / විස්තරය",
   qty: "ප්‍රමාණය",
   note: "විශේෂ සටහන්", // Note එකට වඩාත් වෘත්තීය පෙනුමක් ලබා දෙයි
