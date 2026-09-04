@@ -14,8 +14,15 @@ export function normalizeProfileImageUrl(url: string): string {
   if (trimmed.startsWith("data:") || trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
     return trimmed
   }
-  if (trimmed.startsWith("/api/")) return resolveApiUrl(trimmed)
-  if (trimmed.startsWith("/files/")) return resolveApiUrl(`/api${trimmed}`)
+  // Spring serves uploads at /files/** (Vite + Electron local proxy both forward this).
+  if (
+    trimmed.startsWith("/files/") ||
+    trimmed.startsWith("/uploads/") ||
+    trimmed.startsWith("/images/") ||
+    trimmed.startsWith("/api/")
+  ) {
+    return resolveApiUrl(trimmed)
+  }
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`
 }
 
@@ -57,9 +64,27 @@ export function setStoredProfileAvatar(url: string): void {
 }
 
 export function resolveProfileAvatarUrl(userData?: unknown): string {
-  const fromUser = userData ? extractProfileImageFromUser(userData) : null
-  if (fromUser) return fromUser
+  const fromArg = userData ? extractProfileImageFromUser(userData) : null
+  if (fromArg) return fromArg
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem("user")
+      if (raw) {
+        const fromSessionUser = extractProfileImageFromUser(JSON.parse(raw))
+        if (fromSessionUser) return fromSessionUser
+      }
+    } catch {
+      // ignore bad session JSON
+    }
+  }
   return getStoredProfileAvatar() ?? DEFAULT_AVATAR
+}
+
+/** Persist a server/local avatar and notify Sidebar / Settings. */
+export function applyProfileAvatarFromUser(data: unknown): string {
+  const url = extractProfileImageFromUser(data) ?? getStoredProfileAvatar() ?? DEFAULT_AVATAR
+  if (url && url !== DEFAULT_AVATAR) setStoredProfileAvatar(url)
+  return url
 }
 
 export function validateProfileImageFile(file: File): string | null {

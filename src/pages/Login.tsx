@@ -18,6 +18,7 @@ import { electronFetchAsResponse, shouldRouteApiViaElectronMain } from "@/lib/el
 import { AuthBackground } from "@/components/Auth/AuthBackground"
 import { PaymentWarningModal } from "@/components/Billing/PaymentWarningModal"
 import { isPaymentLockedResponse, parsePaymentAccess, type PaymentAccess } from "@/lib/paymentControl"
+import { applyProfileAvatarFromUser } from "@/lib/profileAvatar"
 
 const LOGIN_API = "/api/security/login"
 const USER_DETAILS_API = "/api/security/user/details"
@@ -147,6 +148,7 @@ const Login = () => {
       }
 
       persistAuthSession(user, token)
+      applyProfileAvatarFromUser(user)
 
       const from = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname
       const target = from || "/pos"

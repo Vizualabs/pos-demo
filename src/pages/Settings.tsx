@@ -47,7 +47,7 @@ import {
 import { listElectronPrinters } from "@/lib/electronPrintClient"
 import {
   PROFILE_AVATAR_CHANGED,
-  extractProfileImageFromUser,
+  applyProfileAvatarFromUser,
   resolveProfileAvatarUrl,
   uploadProfileAvatar,
 } from "@/lib/profileAvatar"
@@ -128,7 +128,7 @@ const Settings = () => {
         phoneNumber: data.phoneNumber || "",
         role: data.role || "",
       })
-      setProfileAvatarUrl(extractProfileImageFromUser(data) ?? resolveProfileAvatarUrl())
+      setProfileAvatarUrl(applyProfileAvatarFromUser(data))
     } catch (error) {
       console.error("Error fetching user details:", error)
       toast.error("Failed to load user details")

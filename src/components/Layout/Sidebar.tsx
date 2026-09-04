@@ -18,7 +18,8 @@ import { cn } from "@/lib/utils";
 import type { FeatureKey } from "@/config/features";
 import { featureConfigs } from "@/config/features";
 import { useAuth, type UserRole } from "@/hooks/useAuth";
-import { PROFILE_AVATAR_CHANGED, resolveProfileAvatarUrl } from "@/lib/profileAvatar";
+import { PROFILE_AVATAR_CHANGED, applyProfileAvatarFromUser, resolveProfileAvatarUrl } from "@/lib/profileAvatar";
+import { resolveApiUrl } from "@/lib/apiClient";
 
 type MenuItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -54,7 +55,28 @@ export const Sidebar = () => {
     const sync = () => setAvatarUrl(resolveProfileAvatarUrl());
     sync();
     window.addEventListener(PROFILE_AVATAR_CHANGED, sync);
-    return () => window.removeEventListener(PROFILE_AVATAR_CHANGED, sync);
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch(resolveApiUrl("/api/security/user/details"), {
+          method: "GET",
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        })
+        if (!res.ok || cancelled) return
+        const data = await res.json()
+        if (cancelled) return
+        setAvatarUrl(applyProfileAvatarFromUser(data))
+      } catch {
+        // keep local/default avatar
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      window.removeEventListener(PROFILE_AVATAR_CHANGED, sync)
+    }
   }, []);
   const visibleMenuItems = menuItems.filter((item) => !item.visibleFor || item.visibleFor.includes(role));
   const displayRole = role === "ADMIN" ? "Admin" : "User";
